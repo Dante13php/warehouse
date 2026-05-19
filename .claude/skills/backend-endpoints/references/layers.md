@@ -17,7 +17,7 @@
 ## Service
 
 - All business logic lives here. Never starts transactions. Never accesses the database directly.
-- Prefer create flows shaped like `ProductCreateService`: validate business constraints, build the entity `Data` object, pass it to storage, let storage assign the new id, and return the created object directly.
+- Prefer create flows shaped like `WarehouseCreateService`: validate business constraints, build the entity `Data` object, pass it to storage, let storage assign the new id, and return the created object directly.
 - For additive relation flows, prefer `AddService` naming over `CreateService` when the operation attaches an existing entity to another existing entity rather than creating a standalone root entity.
 - Do not build raw dicts in services for normal entity create flows when a matching `Data` class exists.
 - Do not re-read an entity immediately after create by default.

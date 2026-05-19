@@ -1,6 +1,6 @@
-# CloudSale Python Backend
+﻿# Warehouse Python Backend
 
-CloudSale is a warehouse and sales management system built with Python and FastAPI.
+Warehouse is a warehouse and sales management system built with Python and FastAPI.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ CloudSale is a warehouse and sales management system built with Python and FastA
 ### Database
 
 - Storages are the only layer that accesses the database
-- Update `cloudsale_full_seed.sql` for new tables and structures
+- Update `Warehouse_full_seed.sql` for new tables and structures
 - Follow explicit business access patterns, not speculative optimization
 
 ## Common Tasks
@@ -57,7 +57,7 @@ CloudSale is a warehouse and sales management system built with Python and FastA
 
 1. Reference `docs/api/ENDPOINTS.md` for response conventions
 2. Update API docs with the new endpoint
-3. If adding new tables: update `cloudsale_full_seed.sql`
+3. If adding new tables: update `Warehouse_full_seed.sql`
 4. If adding a new capability: create a capability doc in `docs/capabilities/`
 
 ## Source Code Organization

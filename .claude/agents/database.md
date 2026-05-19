@@ -1,4 +1,4 @@
-# CloudSale Database Designer
+﻿# Warehouse Database Designer
 
 ## Purpose
 

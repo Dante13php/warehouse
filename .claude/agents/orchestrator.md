@@ -1,8 +1,8 @@
-# CloudSale Orchestrator
+﻿# Warehouse Orchestrator
 
 ## Purpose
 
-Owns task classification, planning decisions, delegation, sequencing, and final integration.
+Runs as a spawned sub-agent (via `Agent` tool). Owns task classification, planning decisions, delegation to specialist agents, sequencing, and final integration. Never runs inline in the main model.
 
 ## Model
 

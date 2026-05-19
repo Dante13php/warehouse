@@ -1,4 +1,4 @@
-# State Management
+﻿# State Management
 
 Zustand for client state. TanStack Query (React Query) for server state.
 
@@ -23,21 +23,21 @@ Small, hook-based store. No Provider required.
 ### Basic Store
 
 ```js
-// stores/productStore.js
+// stores/warehouseStore.js
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-export const useProductStore = create(
+export const useWarehouseStore = create(
   devtools(
     (set) => ({
       selectedIds: [],
-      selectProduct: (id) =>
+      selectWarehouse: (id) =>
         set((s) => ({ selectedIds: [...s.selectedIds, id] })),
-      deselectProduct: (id) =>
+      deselectWarehouse: (id) =>
         set((s) => ({ selectedIds: s.selectedIds.filter((x) => x !== id) })),
       clearSelection: () => set({ selectedIds: [] }),
     }),
-    { name: 'ProductStore' }
+    { name: 'WarehouseStore' }
   )
 )
 ```
@@ -46,10 +46,10 @@ export const useProductStore = create(
 
 ```jsx
 // ✅ Re-renders only when selectedIds changes
-const selectedIds = useProductStore((s) => s.selectedIds)
+const selectedIds = useWarehouseStore((s) => s.selectedIds)
 
 // ❌ Re-renders on any store change
-const store = useProductStore()
+const store = useWarehouseStore()
 ```
 
 Always use a selector function. Never destructure the whole store.
@@ -57,19 +57,19 @@ Always use a selector function. Never destructure the whole store.
 ### Slices Pattern (Large Stores)
 
 ```js
-// stores/slices/billSlice.js
-export const createBillSlice = (set) => ({
-  activeBillId: null,
-  setActiveBill: (id) => set({ activeBillId: id }),
+// stores/slices/shipmentSlice.js
+export const createShipmentSlice = (set) => ({
+  activeShipmentId: null,
+  setActiveShipment: (id) => set({ activeShipmentId: id }),
 })
 
 // stores/appStore.js
 import { create } from 'zustand'
-import { createBillSlice } from './slices/billSlice'
+import { createShipmentSlice } from './slices/shipmentSlice'
 import { createUserSlice } from './slices/userSlice'
 
 export const useAppStore = create((...args) => ({
-  ...createBillSlice(...args),
+  ...createShipmentSlice(...args),
   ...createUserSlice(...args),
 }))
 ```
@@ -85,7 +85,7 @@ export const useSettingsStore = create(
       theme: 'light',
       setTheme: (theme) => set({ theme }),
     }),
-    { name: 'cloudsale-settings' }
+    { name: 'Warehouse-settings' }
   )
 )
 ```
@@ -134,10 +134,10 @@ Use hierarchical arrays. Define a factory to avoid string drift.
 
 ```js
 // lib/queryKeys.js
-export const productKeys = {
-  all: ['products'],
-  list: (filters) => [...productKeys.all, filters],
-  detail: (id) => ['product', id],
+export const warehouseKeys = {
+  all: ['warehouses'],
+  list: (filters) => [...warehouseKeys.all, filters],
+  detail: (id) => ['warehouse', id],
 }
 ```
 
@@ -146,16 +146,16 @@ export const productKeys = {
 ```jsx
 import { useQuery } from '@tanstack/react-query'
 
-export function useProducts(filters) {
+export function useWarehouses(filters) {
   return useQuery({
-    queryKey: productKeys.list(filters),
-    queryFn: () => fetchProducts(filters),
+    queryKey: warehouseKeys.list(filters),
+    queryFn: () => fetchWarehouses(filters),
     staleTime: 5 * 60 * 1000,
   })
 }
 
 // Usage
-const { data: products, isLoading, error } = useProducts({ status: 'active' })
+const { data: warehouses, isLoading, error } = useWarehouses({ region: 'north' })
 ```
 
 ### useMutation
@@ -163,44 +163,44 @@ const { data: products, isLoading, error } = useProducts({ status: 'active' })
 ```jsx
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-export function useCreateProduct() {
+export function useCreateWarehouse() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data) => createProduct(data),
+    mutationFn: (data) => createWarehouse(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productKeys.all })
+      queryClient.invalidateQueries({ queryKey: warehouseKeys.all })
     },
   })
 }
 
 // Usage
-const { mutate, isPending } = useCreateProduct()
-mutate({ name: 'Espresso', price: 2.5 })
+const { mutate, isPending } = useCreateWarehouse()
+mutate({ name: 'North Hub', region: 'north' })
 ```
 
 ### Optimistic Updates
 
 ```jsx
-export function useUpdateProduct() {
+export function useUpdateWarehouse() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, data }) => updateProduct(id, data),
+    mutationFn: ({ id, data }) => updateWarehouse(id, data),
 
     onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: productKeys.detail(id) })
-      const previous = queryClient.getQueryData(productKeys.detail(id))
-      queryClient.setQueryData(productKeys.detail(id), (old) => ({ ...old, ...data }))
+      await queryClient.cancelQueries({ queryKey: warehouseKeys.detail(id) })
+      const previous = queryClient.getQueryData(warehouseKeys.detail(id))
+      queryClient.setQueryData(warehouseKeys.detail(id), (old) => ({ ...old, ...data }))
       return { previous }
     },
 
     onError: (_, { id }, context) => {
-      queryClient.setQueryData(productKeys.detail(id), context?.previous)
+      queryClient.setQueryData(warehouseKeys.detail(id), context?.previous)
     },
 
     onSettled: (_, __, { id }) => {
-      queryClient.invalidateQueries({ queryKey: productKeys.detail(id) })
+      queryClient.invalidateQueries({ queryKey: warehouseKeys.detail(id) })
     },
   })
 }
@@ -211,16 +211,16 @@ export function useUpdateProduct() {
 ```jsx
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
 
-export default async function ProductsPage() {
+export default async function WarehousesPage() {
   const queryClient = new QueryClient()
   await queryClient.prefetchQuery({
-    queryKey: productKeys.all,
-    queryFn: fetchProducts,
+    queryKey: warehouseKeys.all,
+    queryFn: fetchWarehouses,
   })
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <ProductList />
+      <WarehouseList />
     </HydrationBoundary>
   )
 }
@@ -230,7 +230,7 @@ Pre-fills the client cache from the server — eliminates the initial loading st
 
 ### Rules
 
-- Co-locate query hooks with the domain (`hooks/useProducts.js`, `hooks/useBills.js`).
+- Co-locate query hooks with the domain (`hooks/useWarehouses.js`, `hooks/useShipments.js`).
 - Never manually update cache for fresh data — invalidate and refetch.
 - Set `staleTime` intentionally. Default `0` refetches on every mount.
 - Always handle `isLoading` and `error` in components that use `useQuery`.

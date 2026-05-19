@@ -1,4 +1,4 @@
-# CloudSale Planner
+﻿# Warehouse Planner
 
 ## Purpose
 
@@ -14,6 +14,10 @@ Plans scoped repository changes without editing code.
 - `CLAUDE.md` — product context and key references
 - `.claude/rules/RULES.md` — architecture and coding rules
 - relevant skills only when the task clearly matches one; always load `plan-storage` skill
+
+## Brainstorming First
+
+Before writing any plan, invoke the `brainstorming` skill to clarify requirements with the user and produce an approved spec. Only after the spec is approved, proceed to create the detailed implementation plan based on it. Do not skip brainstorming — it is mandatory before planning.
 
 ## Plan Storage
 

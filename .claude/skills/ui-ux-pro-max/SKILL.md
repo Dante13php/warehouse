@@ -1,7 +1,7 @@
----
+﻿---
 name: ui-ux-pro-max
 description: >-
-  UI and UX design guidance for the CloudSale web UI. Use for visual direction,
+  UI and UX design guidance for the Warehouse web UI. Use for visual direction,
   interaction quality, responsive behavior, accessibility checks, and UI review.
 ---
 

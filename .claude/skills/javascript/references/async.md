@@ -81,11 +81,11 @@ Run independent operations in parallel with `Promise.all`:
 
 ```js
 // Bad — sequential for no reason
-const users    = await getUsers()
-const products = await getProducts()
+const users     = await getUsers()
+const shipments = await getShipments()
 
 // Good — parallel
-const [users, products] = await Promise.all([getUsers(), getProducts()])
+const [users, shipments] = await Promise.all([getUsers(), getShipments()])
 ```
 
 `Promise.all` rejects on first failure. Use `Promise.allSettled` when all results matter regardless of individual failures:

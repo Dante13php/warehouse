@@ -1,4 +1,4 @@
----
+﻿---
 name: api-v2-architecture
 description: Create or update backend endpoints following the established Python architecture. Use when adding or changing controllers, requests, services, storages, data, or errors for an endpoint.
 ---
@@ -15,19 +15,19 @@ Use this skill when the task involves:
 ## Workflow
 
 1. Determine whether the work is a full endpoint or a single layer.
-2. Read the relevant existing endpoint files for the same entity — use Products as the default reference.
+2. Read the relevant existing endpoint files for the same entity — use Warehouses as the default reference.
 3. Follow the established naming and folder rules exactly.
 4. Update all affected layers together.
 5. Keep the response and validation contract consistent if the API contract changed.
-6. If the endpoint adds a new table or persisted domain structure, update `cloudsale_full_seed.sql` with both schema and example seed data.
+6. If the endpoint adds a new table or persisted domain structure, update `warehouse_full_seed.sql` with both schema and example seed data.
 7. If the scope includes DB design decisions, use the database agent output as the DB contract before coding.
 
 ## References
 
 - **Layer rules — controller, request, service, data** → [`${CLAUDE_SKILL_DIR}/references/layers.md`]
 - **Storage API shape and consistency rules** → [`${CLAUDE_SKILL_DIR}/references/storage.md`]
-- **Bill, relation, and filter endpoint rules** → [`${CLAUDE_SKILL_DIR}/references/relations.md`]
-- **Products reference files** → [`${CLAUDE_SKILL_DIR}/references/reference-files.md`]
+- **Relation and filter endpoint rules** → [`${CLAUDE_SKILL_DIR}/references/relations.md`]
+- **Warehouses reference files** → [`${CLAUDE_SKILL_DIR}/references/reference-files.md`]
 
 ## Layers
 
@@ -44,8 +44,8 @@ Each layer has a single responsibility. Never skip or merge layers.
 | Files and modules | `snake_case` |
 | Classes | `PascalCase` |
 | File type suffixes | `_service.py`, `_storage.py`, `_data.py`, `_request.py` |
-| Parent-child routes | `bills/{bill_id}/recipes/{recipe_id}` |
-| Local variables | Explicit (`existing_product`, not `existing`) |
+| Parent-child routes | `warehouses/{warehouse_id}/movements/{movement_id}` |
+| Local variables | Explicit (`existing_warehouse`, not `existing`) |
 | Class body | Blank line between the last method and the closing of the class body |
 
 ## Transactions
@@ -61,4 +61,4 @@ Each layer has a single responsibility. Never skip or merge layers.
 
 ## Notes
 
-- For new endpoint-backed persistence, `cloudsale_full_seed.sql` is part of the required delivery, not optional follow-up.
+- For new endpoint-backed persistence, `warehouse_full_seed.sql` is part of the required delivery, not optional follow-up.

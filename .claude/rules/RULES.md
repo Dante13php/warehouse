@@ -1,12 +1,12 @@
-# CloudSale Rules
+﻿# Warehouse Rules
 
 ## Product
 
-CloudSale is warehouse management software. It covers:
+Warehouse is warehouse management software. It covers:
 
 - **Warehouses** — managing multiple warehouse locations and their stock
 - **Production** — manufacturing processes that consume raw materials and produce finished goods
-- **Sales** — sales orders, billing, and customer-facing transactions
+- **Sales** — sales orders and customer-facing transactions
 - **Inventory** — stock tracking, inventory counts, adjustments, and movements between locations
 
 Every feature should be evaluated against these four business areas. When adding new entities or endpoints, identify which area they belong to and follow the domain language from `docs/product/DOMAIN_GLOSSARY.md`.
@@ -89,7 +89,7 @@ Controller → Request → Service → Storage → Data ↔ Database
 
 ### Database
 
-- New tables require `cloudsale_full_seed.sql` updates with schema and seed data
+- New tables require `warehouse_full_seed.sql` updates with schema and seed data
 - Transactions: controller wraps, service never starts, storage operates within
 - Indexes based on documented access patterns only — no speculative optimization
 - Datetime serialization: ISO 8601 UTC — `2026-03-01T14:30:00Z`

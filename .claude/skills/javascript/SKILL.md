@@ -1,7 +1,7 @@
----
+﻿---
 name: frontend
 description: >-
-  React + Next.js frontend implementation conventions for CloudSale. Invoke whenever a task
+  React + Next.js frontend implementation conventions for Warehouse. Invoke whenever a task
   involves any interaction with JavaScript code — writing, reviewing, refactoring, debugging,
   or shared frontend structure. Covers React component patterns, Next.js App Router,
   Motion animations, and state management.
@@ -34,12 +34,12 @@ The stack is **React 18/19 + Next.js App Router + Motion (framer-motion) + Zusta
 | Entity | Style | Examples |
 |---|---|---|
 | Variables, functions | camelCase | `userName`, `fetchData` |
-| Components, classes | PascalCase | `ProductCard`, `UserService` |
+| Components, classes | PascalCase | `WarehouseCard`, `UserService` |
 | True compile-time constants | SCREAMING_SNAKE_CASE | `MAX_RETRIES`, `API_BASE_URL` |
 | Booleans | `is`/`has`/`can`/`should` prefix | `isLoading`, `hasAccess` |
-| Component files | PascalCase | `ProductCard.jsx` |
-| Utility/hook files | camelCase | `useProducts.js`, `formatPrice.js` |
-| Route segments | kebab-case | `product-catalog/` |
+| Component files | PascalCase | `WarehouseCard.jsx` |
+| Utility/hook files | camelCase | `useWarehouses.js`, `formatStock.js` |
+| Route segments | kebab-case | `warehouse-list/` |
 
 ## Equality and Safety
 
@@ -76,15 +76,15 @@ The stack is **React 18/19 + Next.js App Router + Motion (framer-motion) + Zusta
 // 1. Imports
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { useProductStore } from '@/stores/productStore'
+import { useWarehouseStore } from '@/stores/warehouseStore'
 
 // 2. Component
-export function ProductCard({ id, name, price }) {
+export function WarehouseCard({ id, name, capacity }) {
   // hooks first
   const [isExpanded, setIsExpanded] = useState(false)
 
   // derived values
-  const formattedPrice = formatPrice(price)
+  const formattedCapacity = formatStock(capacity)
 
   // handlers
   const handleToggle = () => setIsExpanded((prev) => !prev)
@@ -93,7 +93,7 @@ export function ProductCard({ id, name, price }) {
   return (
     <motion.div layout onClick={handleToggle}>
       <h3>{name}</h3>
-      <span>{formattedPrice}</span>
+      <span>{formattedCapacity}</span>
     </motion.div>
   )
 }

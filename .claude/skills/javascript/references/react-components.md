@@ -13,13 +13,13 @@
 ```jsx
 // ❌ Bad — disables RSC for entire subtree
 'use client'
-export default function ProductsLayout({ children }) { ... }
+export default function WarehousesLayout({ children }) { ... }
 
 // ✅ Good — only the interactive leaf is a client component
 'use client'
-export function AddToCartButton({ productId }) {
-  const [added, setAdded] = useState(false)
-  return <button onClick={() => setAdded(true)}>{added ? 'Added' : 'Add'}</button>
+export function UpdateStockButton({ warehouseId }) {
+  const [updated, setUpdated] = useState(false)
+  return <button onClick={() => setUpdated(true)}>{updated ? 'Updated' : 'Update'}</button>
 }
 ```
 
@@ -119,9 +119,9 @@ Wrap async Server Components in `<Suspense>` at the data boundary. Wrap feature 
 ```jsx
 import { ErrorBoundary } from 'react-error-boundary'
 
-<ErrorBoundary fallback={<ProductError />}>
+<ErrorBoundary fallback={<WarehouseError />}>
   <Suspense fallback={<Skeleton />}>
-    <ProductList />
+    <WarehouseList />
   </Suspense>
 </ErrorBoundary>
 ```
@@ -132,7 +132,7 @@ import { ErrorBoundary } from 'react-error-boundary'
 
 **React.memo** — only for components that render frequently with unchanged props:
 ```jsx
-const ProductCard = memo(function ProductCard({ id, name, price }) { ... })
+const WarehouseCard = memo(function WarehouseCard({ id, name, capacity }) { ... })
 ```
 
 **Virtualization** — use `@tanstack/react-virtual` for lists over 50–100 items:

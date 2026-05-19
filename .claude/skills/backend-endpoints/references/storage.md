@@ -9,7 +9,7 @@
 
 - Each storage must expose `get(...)` and `get_partial(...)` by default.
 - Use `get_by_id(...)` and `get_by_id_partial(...)` only when the lookup is by one concrete id field for that entity.
-- If a lookup uses multiple id fields, name the method explicitly after those fields — `get_by_bill_id_and_recipe_id(...)` and `get_by_bill_id_and_recipe_id_partial(...)`.
+- If a lookup uses multiple id fields, name the method explicitly after those fields — `get_by_warehouse_id_and_movement_id(...)` and `get_by_warehouse_id_and_movement_id_partial(...)`.
 - Do not leave a storage in a half-custom state. The standard read API is mandatory; entity-specific helpers may only be thin wrappers around it, not replacements.
 
 ## Query Order
