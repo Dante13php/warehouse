@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$raw=[Console]::In.ReadToEnd(); $j=$raw|ConvertFrom-Json; $type=if($j.tool_input.subagent_type){$j.tool_input.subagent_type}else{'claude'}; $mdl=if($j.tool_input.model){$j.tool_input.model}else{'inherited (sonnet-4-6)'}; $desc=$j.tool_input.description; $msg='AGENT START: '+$type+' / model: '+$mdl+' / '+$desc; @{systemMessage=$msg} | ConvertTo-Json -Compress",
+            "statusMessage": "Стартира агент..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$raw=[Console]::In.ReadToEnd(); $j=$raw|ConvertFrom-Json; $type=if($j.tool_input.subagent_type){$j.tool_input.subagent_type}else{'claude'}; $mdl=if($j.tool_input.model){$j.tool_input.model}else{'inherited (sonnet-4-6)'}; $desc=$j.tool_input.description; $msg='AGENT DONE: '+$type+' / model: '+$mdl+' / '+$desc; @{systemMessage=$msg} | ConvertTo-Json -Compress",
+            "statusMessage": "Агентът приключи..."
+          }
+        ]
+      }
+    ]
+  }
+}

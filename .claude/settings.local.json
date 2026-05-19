@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\Projects\\\\CloudSale\" -Recurse -Force)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(mkdir -p \"D:\\\\Projects\\\\CloudSalePython\\\\.claude\\\\skills\\\\backend-endpoints\")",
+      "Bash(mkdir -p \"D:\\\\Projects\\\\CloudSalePython\\\\.claude\\\\skills\\\\python\")",
+      "WebSearch",
+      "Bash(Remove-Item *)"
+    ]
+  }
+}
