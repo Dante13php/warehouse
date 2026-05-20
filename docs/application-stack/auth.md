@@ -24,7 +24,7 @@ per-user **API key** instead of a JWT.
 | API key | Sent by external clients in the `X-API-Key` header | Per-user credential for non-UI/API clients; resolved to a user by `ApiKeyStorage`. |
 | `users` table | Per-tenant database | Tenant-scoped user records, bcrypt password hashes, role. |
 | `api_keys` table | Per-tenant database (planned) | Maps a hashed API key to its owning user. |
-| Auth middleware | Request boundary | `AuthMiddleware` (`app/infrastructure/auth_middleware.py`). Runs before every controller; establishes a trusted identity from the JWT bearer, then the API key. |
+| Auth middleware | Request boundary | `AuthMiddleware` (`app/infrastructure/auth_middleware.py`). Runs before every controller; establishes a trusted identity via a hard channel split by `User-Agent` — browser ⇒ JWT bearer only, non-browser/missing ⇒ API key only (the non-selected credential is never consulted). |
 | `UserStorage` | Storage | Loads the full user record (`AuthUser`) by id for `ActiveUserMapper.load()`. Not-implemented stub (raises 404) until the `users` table exists. |
 | `ActiveUserMapper` | Per-request mapper | The single read surface controllers use for identity. Claim-backed identity (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`) needs no DB; the **full user record** is lazy-loaded and memoized via `await load()` (then `user` / `email`), and `get_api_key()` lazy-loads the user's API key — mirroring CloudSale's `ActiveUserMapper`. |
 
@@ -89,34 +89,47 @@ client                        FastAPI                     Redis / DB
 ### Authenticated request
 
 ```
-client ── Authorization: Bearer <access JWT>  ──▶ AuthMiddleware
-      └── X-API-Key: <api key>  (alternative) ──▶   │ 1. try JWT bearer (decode + verify)
-                                                     │ 2. else, if API key present, resolve via ApiKeyStorage
-                                                     │ attach request.state.token_data
-                                                     ▼
-                                          identity{ sub, tenant_id, role }
-                                                     │  get_ioc reads request.state.token_data
-                                                     ▼
-                                  controller → self.ActiveUserMapper → …
+browser   ── User-Agent: Mozilla/…  + Authorization: Bearer <JWT> ──▶ AuthMiddleware
+machine   ── User-Agent: curl/…     + X-API-Key: <api key>        ──▶   │ pick ONE channel by User-Agent
+                                                                        │  browser ⇒ JWT bearer only
+                                                                        │  non-browser/empty ⇒ API key only
+                                                                        │ attach request.state.token_data
+                                                                        ▼
+                                                       identity{ sub, tenant_id, role }
+                                                                        │  get_ioc reads request.state.token_data
+                                                                        ▼
+                                          controller → self.ActiveUserMapper → …
 ```
 
 `AuthMiddleware` runs before any controller and establishes identity once per
-request, attaching a verified `TokenData` to `request.state.token_data`. It tries
-two strategies in precedence order:
+request, attaching a verified `TokenData` to `request.state.token_data`. It
+performs a **hard channel split by `User-Agent`** — the two strategies are
+mutually exclusive, with no precedence and no fallback. The channel is chosen up
+front and the credential type for the non-selected channel is never consulted
+(not read, not decoded, not an error). The browser-signature token list is the
+in-module constant `_BROWSER_UA_SIGNATURES`; a missing or empty `User-Agent` is
+treated as non-browser (machine channel).
 
-1. **JWT bearer** — decode and verify the `Authorization: Bearer <jwt>` token. No
-   Redis or DB lookup is needed for a valid, unexpired access token; that is the
-   point of stateless JWTs. A malformed or expired bearer is treated as anonymous
-   here (routes that require auth still return 401 via `get_current_user`).
-2. **API key** — only attempted when no valid JWT is present. The configured
-   `X-API-Key` header is resolved to a user via `ApiKeyStorage`, and the resolved
+1. **Browser channel → JWT bearer only** — when `User-Agent` contains a browser
+   signature. Decode and verify the `Authorization: Bearer <jwt>` token. No Redis
+   or DB lookup is needed for a valid, unexpired access token; that is the point
+   of stateless JWTs. A malformed, expired, or absent bearer is treated as
+   anonymous here (routes that require auth still return 401 via
+   `get_current_user`). Any `X-API-Key` header is ignored.
+2. **Machine channel → API key only** — when `User-Agent` is non-browser or
+   missing/empty. If the configured `X-API-Key` header is **absent**, the request
+   is anonymous (a route may be public; a missing credential is not an error).
+   When present, it is resolved to a user via `ApiKeyStorage`, and the resolved
    user seeds the identity. If the header is **present but the key cannot be
    resolved** (`None`), the middleware returns **401 immediately** — presenting a
    credential that fails never downgrades to anonymous access. While the
    `api_keys` table does not yet exist, `ApiKeyStorage` raises `404 Not Found` to
    signal the feature is unimplemented; the middleware catches that and surfaces
    the 404 (an exception left to propagate from `BaseHTTPMiddleware` would
-   otherwise become a 500).
+   otherwise become a 500). Any `Authorization` bearer is ignored.
+
+`User-Agent` selects only *which channel runs*; it never grants identity by
+itself, and both channels still require a valid credential.
 
 `get_ioc` then reads `request.state.token_data` (it never decodes a token itself),
 and controllers read identity only through `self.ActiveUserMapper`. Controllers
@@ -178,8 +191,11 @@ window is small, and the session cannot be renewed once the refresh token is gon
 - Identity is established in `AuthMiddleware` before any controller; controllers
   read it only through `ActiveUserMapper`. `get_ioc` reads `request.state`, never
   decoding a token itself.
-- JWT takes precedence over the API key. A malformed JWT is anonymous; a presented
-  API key that fails to resolve is rejected with 401 (never anonymous).
+- The auth channel is a hard split by `User-Agent` (browser ⇒ JWT only;
+  non-browser/missing ⇒ API key only); the non-selected credential is never
+  consulted. `User-Agent` selects the channel only and never grants identity by
+  itself. A malformed/expired/absent JWT is anonymous; a presented API key that
+  fails to resolve is rejected with 401 (never anonymous).
 - Never trust `tenant_id` or `role` from the request body or query params — always
   read them from the verified token (or the API-key lookup result).
 - Credentials (JWTs, API keys) are never logged.

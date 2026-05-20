@@ -15,7 +15,7 @@
 | Attribute | Type | Source | Notes |
 |---|---|---|---|
 | `session` | `AsyncSession` | request DB scope | property; raises `IocResolutionError` if no session bound |
-| `claims` | `TokenData \| None` | `request.state.token_data`, set by `AuthMiddleware` | full claims object established by the auth middleware (JWT bearer, then API key); `get_ioc` reads it from `request.state` and never decodes a token itself; `None` for public/unauthenticated routes; never from body/query; no setter |
+| `claims` | `TokenData \| None` | `request.state.token_data`, set by `AuthMiddleware` | full claims object established by the auth middleware via a hard channel split by `User-Agent` (browser ⇒ JWT bearer only, non-browser/missing ⇒ API key only); `get_ioc` reads it from `request.state` and never decodes a token itself; `None` for public/unauthenticated routes; never from body/query; no setter |
 | `tenant_id` | `str \| None` | derived from `claims.tenant_id` | `None` for public routes; never from body/query; backward-compatible property |
 | `redis` | `Redis` | `get_redis` provider | request-scoped client |
 | `settings` | `Settings` | `get_settings` provider | application settings |
@@ -169,7 +169,7 @@ class RefreshTokenStorage(AbstractStorage):
 - Container attribute names are always literals in source code. No code path passes user input into `getattr(ioc, ...)` or `ioc.<x>`. The dynamic `importlib` resolution therefore cannot be driven by user input.
 - Package scanning is bounded to the five fixed roots (`app.services`, `app.storages`, `app.mappers`, `app.requests`, `app.errors`). Resolution cannot import modules outside `app.*`.
 - The container is request-scoped; the session and per-request instances are never shared across requests. Only immutable class objects are cached at process level.
-- `get_ioc` is not an authentication gate. It only reads the identity that `AuthMiddleware` established on `request.state`. Authenticated routes must still enforce auth with `get_current_user` (or an equivalent dependency) in addition to obtaining the container. The middleware itself stays non-blocking for the JWT path (a malformed/expired bearer is treated as anonymous so public routes keep working); the one exception is the API-key path, where a *presented* API key that cannot be resolved returns 401 immediately rather than downgrading to anonymous.
+- `get_ioc` is not an authentication gate. It only reads the identity that `AuthMiddleware` established on `request.state`. Authenticated routes must still enforce auth with `get_current_user` (or an equivalent dependency) in addition to obtaining the container. The middleware itself stays non-blocking on the browser/JWT channel (a malformed/expired/absent bearer is treated as anonymous so public routes keep working); the one exception is the machine/API-key channel, where a *presented* API key that cannot be resolved returns 401 immediately rather than downgrading to anonymous.
 
 ## Error Reference
 

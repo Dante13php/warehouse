@@ -19,6 +19,21 @@ logger = logging.getLogger(__name__)
 
 _BEARER_PREFIX = "Bearer "
 
+# Lowercased substring tokens that mark a User-Agent as a browser. "mozilla"
+# alone covers every mainstream browser (all send a ``Mozilla/5.0`` prefix); the
+# rest are defensive. This is the single, named knob for the channel rule — keep
+# the discrimination logic isolated here so it is easy to read and tune later.
+_BROWSER_UA_SIGNATURES: tuple[str, ...] = (
+    "mozilla",
+    "chrome",
+    "safari",
+    "firefox",
+    "edg",
+    "opera",
+    "webkit",
+    "gecko",
+)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Establishes request identity *before* any controller runs.
@@ -28,28 +43,38 @@ class AuthMiddleware(BaseHTTPMiddleware):
     relocated to middleware so controllers stay free of auth logic and only read
     identity through ``ActiveUserMapper``.
 
-    Two pluggable strategies, tried in precedence order:
+    **Hard channel split by ``User-Agent``** — the two credential strategies are
+    *mutually exclusive*. The channel is chosen up front from the ``User-Agent``
+    header and the non-selected credential type is **never consulted** (not read,
+    not decoded, not an error). There is no precedence and no fallback between
+    channels.
 
-    1. **JWT bearer** (UI / refresh-token sessions). A valid
-       ``Authorization: Bearer <jwt>`` yields a :class:`TokenData` attached to
-       ``request.state.token_data``. A *malformed or expired* JWT is treated as
-       anonymous here — routes that require auth still enforce 401 via their own
-       ``get_current_user`` dependency. JWT takes precedence: the API-key branch
-       is only attempted when no valid JWT is present.
-    2. **API key** (external API clients). When the configured API-key header is
-       present, it is resolved to a user via ``ApiKeyStorage``. On success the
-       resolved user seeds a :class:`TokenData`. If the header is present but the
-       key cannot be resolved (``None``), the middleware returns **401
-       immediately** — a presented credential that fails must never silently
-       downgrade to anonymous access. While the ``api_keys`` table does not yet
-       exist, ``ApiKeyStorage`` raises an ``HTTPException(404)`` to signal the
-       feature is unimplemented; the middleware surfaces that status verbatim
-       (it must catch it, since an exception raised inside ``BaseHTTPMiddleware``
-       would otherwise become a 500).
+    1. **Browser channel → JWT bearer only** (UI / refresh-token sessions). A
+       request whose ``User-Agent`` contains a browser signature uses the JWT
+       strategy exclusively. A valid ``Authorization: Bearer <jwt>`` yields a
+       :class:`TokenData` attached to ``request.state.token_data``. A *malformed,
+       expired, or absent* JWT is treated as anonymous — routes that require auth
+       still enforce 401 via their own ``get_current_user`` dependency. Any
+       API-key header on a browser request is ignored.
+    2. **Machine channel → API key only** (external API clients; e.g. curl,
+       Insomnia). A request whose ``User-Agent`` is non-browser, or is
+       missing/empty, uses the API-key strategy exclusively. When the configured
+       API-key header is **absent**, the request is anonymous (a route may be
+       public; a missing credential is not an error). When the header is
+       **present**, it is resolved to a user via ``ApiKeyStorage``: on success the
+       resolved user seeds a :class:`TokenData`; if the key cannot be resolved
+       (``None``), the middleware returns **401 immediately** — a presented
+       credential that fails must never silently downgrade to anonymous access.
+       While the ``api_keys`` table does not yet exist, ``ApiKeyStorage`` raises
+       an ``HTTPException(404)`` to signal the feature is unimplemented; the
+       middleware surfaces that status verbatim (it must catch it, since an
+       exception raised inside ``BaseHTTPMiddleware`` would otherwise become a
+       500). Any ``Authorization`` bearer on a machine request is ignored.
 
-    If neither strategy yields identity (and no API key was presented),
-    ``request.state.token_data`` is left ``None`` (anonymous); public routes
-    still work.
+    The ``User-Agent`` selects *which channel runs* only; it never grants
+    identity by itself. Both channels still require a valid credential, and
+    ``tenant_id`` / ``role`` always come from verified JWT claims or the API-key
+    lookup result — never from the request body, query params, or ``User-Agent``.
     """
 
     async def dispatch(
@@ -58,11 +83,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         settings = get_settings()
         request.state.token_data = None
 
-        token_data = self._authenticate_jwt(request, settings)
-
-        if token_data is None:
+        if self._is_browser_request(request):
+            # Browser channel: JWT only. The API-key header is never consulted.
+            token_data = self._authenticate_jwt(request, settings)
+        else:
+            # Machine channel: API key only. The Authorization bearer is never
+            # consulted.
             api_key = request.headers.get(settings.api_key_header)
-            if api_key is not None:
+            if api_key is None:
+                # No credential presented on a possibly-public route: anonymous.
+                token_data = None
+            else:
                 try:
                     token_data = await self._authenticate_api_key(api_key, settings)
                 except HTTPException as exc:
@@ -77,6 +108,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         request.state.token_data = token_data
         return await call_next(request)
+
+    def _is_browser_request(self, request: Request) -> bool:
+        """Return ``True`` when the ``User-Agent`` looks like a browser.
+
+        A missing or empty ``User-Agent`` is **not** a browser: browsers always
+        send one, while scripted clients sometimes omit it, so "no UA" belongs to
+        the machine channel. The decision is a substring check against
+        :data:`_BROWSER_UA_SIGNATURES` and is the only place the channel rule
+        lives.
+        """
+        user_agent = request.headers.get("User-Agent")
+        if not user_agent:
+            return False
+        user_agent = user_agent.lower()
+        return any(signature in user_agent for signature in _BROWSER_UA_SIGNATURES)
 
     def _authenticate_jwt(
         self, request: Request, settings: Settings
