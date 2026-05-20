@@ -30,6 +30,8 @@ Every feature should be evaluated against these four business areas. When adding
 
 ```
 Controller → Request → Service → Storage → Data ↔ Database
+                    ↕
+                 Mapper (per-request context)
 ```
 
 | Layer | Responsibility |
@@ -37,6 +39,7 @@ Controller → Request → Service → Storage → Data ↔ Database
 | Controller | Route requests, return responses, wrap mutations in TransactionHelper |
 | Request | Validate and normalize all input at the boundary |
 | Service | All business logic, coordinates storages |
+| Mapper | Per-request context holder (identity, role checks); may lazy-load from Storage |
 | Storage | All database access, returns Data / DataCollection / None |
 | Data | Entity shape, from_row factory, no logic |
 | Error | ApplicationError subclasses, unique error codes |
@@ -46,8 +49,10 @@ Controller → Request → Service → Storage → Data ↔ Database
 **Controller**
 - No business logic
 - No direct database access
-- Obtain all dependencies through the IoC container (`ioc: Ioc = Depends(get_ioc)`); resolve services on demand via `ioc.<ClassName>`
-- Wrap all mutations using `ioc.transaction.wrap(ioc.session, ...)`
+- Extend `BaseController` (`app/controllers/base_controller.py`); never declare `__init__` and never name `ioc` or `self._ioc`
+- Resolve collaborators and resources on demand via `self.<ClassName>` (e.g. `self.AuthService`, `self.InvalidCredentialsError.target`)
+- Routes stay thin: inject the controller via `ctrl: <Controller> = Depends(<Controller>)` and delegate to a controller method; routes carry no `ioc` parameter and no `Depends(get_ioc)`
+- Wrap all mutations using `self.transaction.wrap(self.session, ...)`
 
 **Request**
 - All validation here, never in services
@@ -57,12 +62,25 @@ Controller → Request → Service → Storage → Data ↔ Database
 
 **Service**
 - All business logic lives here
+- Extend `AbstractService` (`app/services/abstract_service.py`); never declare `__init__` and never name `ioc` or `self._ioc`
+- Access collaborators and resources via `self.<ClassName>` (e.g. `self.UserStorage`, `self.redis`, `self.settings`, `self.<OtherService>`)
 - Never starts transactions
 - Never accesses database directly
 - Uses storages for all reads and writes
 
+**Mapper**
+- Per-request context holder — not a DTO, not a service, not a repository
+- Holds state set once per request (e.g. verified JWT identity) and exposes computed properties and role-check methods
+- May lazy-load related data from Storage, caching the result on the instance
+- Resolved by IoC via the `*Mapper` suffix from the flat `app/mappers/` package; instantiated and memoized per request
+- Must subclass `AbstractMapper` (`app/mappers/abstract_mapper.py`)
+- Never opens transactions; never writes to the database directly
+- Access identity (`ActiveUserMapper`) only after verifying `is_initialized()` on public/optional-auth routes
+
 **Storage**
 - Only layer that touches the database
+- Extend `AbstractStorage` (`app/storages/abstract_storage.py`); never declare `__init__` and never name `ioc` or `self._ioc`
+- Read request-scoped resources via `self.<resource>` (`self.session`, `self.tenant_id`, `self.redis`); never accept them as method parameters
 - Never starts transactions
 - Assigns generated primary keys back to the Data object passed in
 - Returns Data, DataCollection, or None — nothing else
@@ -136,23 +154,27 @@ Controller → Request → Service → Storage → Data ↔ Database
 - JWT tokens are stateless and short-lived (15–60 minutes)
 - Refresh tokens are stored in Redis and are revocable
 - Token claims carry: `sub` (user id), `tenant_id`, `role`, `exp`
-- Token verification happens in middleware — controllers receive an already-verified identity object
-- Never trust `tenant_id` or `role` from request body or query params — always read from verified token claims
+- Identity is established once per request in `AuthMiddleware` (`app/infrastructure/auth_middleware.py`), which runs before any controller and attaches a verified `TokenData` to `request.state.token_data`. `get_ioc` reads that value; it never decodes a token itself.
+- The middleware has two strategies, tried in precedence order: **JWT bearer** first (UI/refresh-token sessions), then **API key** (external API clients, via `ApiKeyStorage` resolving the configured `api_key_header`). JWT wins when both are present.
+- A malformed/expired JWT is treated as anonymous so public routes still work; routes that require auth enforce 401 via `get_current_user`. A *presented* API key that cannot be resolved returns 401 immediately — presenting a credential that fails never grants anonymous access.
+- Controllers contain no auth/identity-resolution logic. They read identity only through `self.ActiveUserMapper` (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`); `ActiveUserMapper` is the single read surface for request identity.
+- Never trust `tenant_id` or `role` from request body or query params — always read from verified token claims (or the API-key lookup result)
 
 ### Dependency Injection
 
 The official DI mechanism is the per-request **IoC container** (`app/infrastructure/ioc.py`). Full specification: `docs/architecture/IOC.md`.
 
 - One `Ioc` instance is created per HTTP request via the `get_ioc` FastAPI dependency. It is request-scoped — never an app-level singleton, never cached at module level.
-- The container carries the request's `session` (`AsyncSession | None`), `tenant_id` (`str | None`, from verified JWT claims only), `redis`, and `settings`.
+- The container carries the request's `session` (`AsyncSession | None`), `claims` (`TokenData | None`, full verified JWT claims), `tenant_id` (`str | None`, derived from `claims`), `redis`, and `settings`. All identity values are sourced exclusively from verified JWT claims; never from request body or query params.
 - Dependencies are resolved by **class name** through `__getattr__`, using a suffix → layer convention:
   - `*Service` → `app.services` (nested by domain) → memoized request-scoped instance
   - `*Storage` → `app.storages` (flat) → memoized request-scoped instance
+  - `*Mapper` → `app.mappers` (flat) → memoized request-scoped instance
   - `*Request` → `app.requests` (nested by domain) → `GenericFactory`; call `.get(...)` to construct
   - `*Error` → `app.errors` (nested by domain) → `ErrorFactory`; call `.get(...)` to construct, `.target` for the class
-- Resolution is **convention-strict (Strategy B)**: a resolvable class lives in a module whose file name is the snake_case of the class name. `AuthService` → `auth_service.py`; `RefreshTokenStorage` → `refresh_token_storage.py`; `InvalidCredentialsError` → `invalid_credentials_error.py`.
-- Service and storage constructors take a single argument `ioc: Ioc` and pull collaborators and resources lazily (`self._ioc.RefreshTokenStorage`, `self._ioc.session`, `self._ioc.redis`, `self._ioc.settings`). No injected collaborator parameter lists.
-- `get_ioc` is the only `Depends` controllers use. It bootstraps the container; it is not an authentication gate — authenticated routes must still enforce auth with `get_current_user` (or equivalent).
+- Resolution is **convention-strict (Strategy B)**: a resolvable class lives in a module whose file name is the snake_case of the class name. `AuthService` → `auth_service.py`; `RefreshTokenStorage` → `refresh_token_storage.py`; `ActiveUserMapper` → `active_user_mapper.py`; `InvalidCredentialsError` → `invalid_credentials_error.py`.
+- Service, storage, and mapper constructors take a single argument `ioc: Ioc` and pull collaborators and resources lazily (`self._ioc.RefreshTokenStorage`, `self._ioc.session`, `self._ioc.redis`, `self._ioc.settings`, `self._ioc.claims`). No injected collaborator parameter lists.
+- `get_ioc` is the only `Depends` controllers use. It bootstraps the container by reading the identity that `AuthMiddleware` placed on `request.state`; it does not decode tokens and is not an authentication gate — authenticated routes must still enforce auth with `get_current_user` (or equivalent).
 - Resolution names are always literals in source (`ioc.AuthService`); never derive a container attribute name from request data.
 - Unknown names raise `IocResolutionError` (an `AttributeError` subclass) — never a silent `None`.
 
@@ -179,6 +201,7 @@ app/
   controllers/{domain}/
   requests/{domain}/
   services/{domain}/
+  mappers/
   storages/
   data/
     abstract_data.py      # AbstractData base (FIELDS, expanded token, from_row, fix_type, to_dict, field guard)
@@ -189,6 +212,8 @@ app/
   infrastructure/
 main.py
 ```
+
+`mappers/` is flat (no subdomain folders). All mapper classes live directly under `app/mappers/`.
 
 ---
 

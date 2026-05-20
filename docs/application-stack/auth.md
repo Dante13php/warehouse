@@ -25,8 +25,8 @@ per-user **API key** instead of a JWT.
 | `users` table | Per-tenant database | Tenant-scoped user records, bcrypt password hashes, role. |
 | `api_keys` table | Per-tenant database (planned) | Maps a hashed API key to its owning user. |
 | Auth middleware | Request boundary | `AuthMiddleware` (`app/infrastructure/auth_middleware.py`). Runs before every controller; establishes a trusted identity from the JWT bearer, then the API key. |
-| `UserStorage` | Storage | Loads the full user record (`AuthUser`) by id for `CurrentUserMapper.load()`. Not-implemented stub (raises 404) until the `users` table exists. |
-| `CurrentUserMapper` | Per-request mapper | The single read surface controllers use for identity. Claim-backed identity (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`) needs no DB; the **full user record** is lazy-loaded and memoized via `await load()` (then `user` / `email`), and `get_api_key()` lazy-loads the user's API key — mirroring CloudSale's `ActiveUserMapper`. |
+| `UserStorage` | Storage | Loads the full user record (`AuthUser`) by id for `ActiveUserMapper.load()`. Not-implemented stub (raises 404) until the `users` table exists. |
+| `ActiveUserMapper` | Per-request mapper | The single read surface controllers use for identity. Claim-backed identity (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`) needs no DB; the **full user record** is lazy-loaded and memoized via `await load()` (then `user` / `email`), and `get_api_key()` lazy-loads the user's API key — mirroring CloudSale's `ActiveUserMapper`. |
 
 ## Token claims
 
@@ -97,7 +97,7 @@ client ── Authorization: Bearer <access JWT>  ──▶ AuthMiddleware
                                           identity{ sub, tenant_id, role }
                                                      │  get_ioc reads request.state.token_data
                                                      ▼
-                                  controller → self.CurrentUserMapper → …
+                                  controller → self.ActiveUserMapper → …
 ```
 
 `AuthMiddleware` runs before any controller and establishes identity once per
@@ -119,7 +119,7 @@ two strategies in precedence order:
    otherwise become a 500).
 
 `get_ioc` then reads `request.state.token_data` (it never decodes a token itself),
-and controllers read identity only through `self.CurrentUserMapper`. Controllers
+and controllers read identity only through `self.ActiveUserMapper`. Controllers
 never parse the raw token or API key themselves.
 
 ### Refresh
@@ -176,7 +176,7 @@ window is small, and the session cannot be renewed once the refresh token is gon
 - Refresh tokens live in Redis and are revocable.
 - Claims carry `sub`, `tenant_id`, `role`, `exp`.
 - Identity is established in `AuthMiddleware` before any controller; controllers
-  read it only through `CurrentUserMapper`. `get_ioc` reads `request.state`, never
+  read it only through `ActiveUserMapper`. `get_ioc` reads `request.state`, never
   decoding a token itself.
 - JWT takes precedence over the API key. A malformed JWT is anonymous; a presented
   API key that fails to resolve is rejected with 401 (never anonymous).

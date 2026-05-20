@@ -17,7 +17,7 @@ _ROLE_ADMIN = "admin"
 _ROLE_MANAGER = "manager"
 
 
-class CurrentUserMapper(AbstractMapper):
+class ActiveUserMapper(AbstractMapper):
     """Per-request holder of the active user, mirroring CloudSale's
     ``ActiveUserMapper``.
 
@@ -97,7 +97,7 @@ class CurrentUserMapper(AbstractMapper):
         if self._user is None:
             raise UnauthenticatedError(
                 "The full user record has not been loaded yet; "
-                "call 'await CurrentUserMapper.load()' before reading profile fields."
+                "call 'await ActiveUserMapper.load()' before reading profile fields."
             )
         return self._user
 

@@ -15,7 +15,8 @@
 | Attribute | Type | Source | Notes |
 |---|---|---|---|
 | `session` | `AsyncSession` | request DB scope | property; raises `IocResolutionError` if no session bound |
-| `tenant_id` | `str \| None` | verified JWT claims | `None` for public routes; never from body/query |
+| `claims` | `TokenData \| None` | `request.state.token_data`, set by `AuthMiddleware` | full claims object established by the auth middleware (JWT bearer, then API key); `get_ioc` reads it from `request.state` and never decodes a token itself; `None` for public/unauthenticated routes; never from body/query; no setter |
+| `tenant_id` | `str \| None` | derived from `claims.tenant_id` | `None` for public routes; never from body/query; backward-compatible property |
 | `redis` | `Redis` | `get_redis` provider | request-scoped client |
 | `settings` | `Settings` | `get_settings` provider | application settings |
 | `transaction` | `TransactionHelper` | container | memoized per request |
@@ -28,12 +29,14 @@ The container resolves classes by **class name** via `__getattr__`. The class-na
 |---|---|---|---|
 | `*Service` | `app.services` | nested by domain | instance (memoized) |
 | `*Storage` | `app.storages` | flat | instance (memoized) |
+| `*Mapper` | `app.mappers` | flat | instance (memoized) |
 | `*Request` | `app.requests` | nested by domain | `GenericFactory` |
 | `*Error` | `app.errors` | nested by domain | `ErrorFactory` |
 
 - Unknown suffix → `IocResolutionError`.
 - Known suffix, no matching module/class → `IocResolutionError`.
 - `IocResolutionError` subclasses `AttributeError`. Never returns `None`.
+- `*Mapper` lifetime: request-scoped memoized instance, same as `*Service`/`*Storage`. Constructor takes `ioc: Ioc`.
 
 ## Path Convention (Strategy B, convention-strict)
 
@@ -44,29 +47,56 @@ A resolvable class lives in a module whose file name is the snake_case of the cl
 | `AuthService` | `auth_service.py` | `app/services/auth/auth_service.py` |
 | `NotImplementedUserLookupService` | `not_implemented_user_lookup_service.py` | `app/services/auth/not_implemented_user_lookup_service.py` |
 | `RefreshTokenStorage` | `refresh_token_storage.py` | `app/storages/refresh_token_storage.py` |
+| `AbstractMapper` | `abstract_mapper.py` | `app/mappers/abstract_mapper.py` |
+| `ActiveUserMapper` | `active_user_mapper.py` | `app/mappers/active_user_mapper.py` |
 | `LoginRequest` | `login_request.py` | `app/requests/auth/login_request.py` |
 | `RefreshRequest` | `refresh_request.py` | `app/requests/auth/refresh_request.py` |
 | `LogoutRequest` | `logout_request.py` | `app/requests/auth/logout_request.py` |
 | `InvalidCredentialsError` | `invalid_credentials_error.py` | `app/errors/auth/invalid_credentials_error.py` |
 | `InvalidTokenError` | `invalid_token_error.py` | `app/errors/auth/invalid_token_error.py` |
 | `ExpiredTokenError` | `expired_token_error.py` | `app/errors/auth/expired_token_error.py` |
+| `UnauthenticatedError` | `unauthenticated_error.py` | `app/errors/auth/unauthenticated_error.py` |
+
+`*Mapper` uses a flat namespace (`app/mappers/`). Nesting depth is 1 (no subdomain folders). The recursive scanner still discovers classes correctly.
 
 snake_case conversion: insert `_` before every uppercase letter that is not the first character, then lowercase. `AuthService` → `auth_service`. `RefreshTokenStorage` → `refresh_token_storage`.
 
 ## Instantiation Contract
 
-- `*Service` and `*Storage` constructors take exactly one argument: `ioc: Ioc`.
-- The constructor stores `self._ioc = ioc` and pulls collaborators and resources lazily inside methods: `self._ioc.RefreshTokenStorage`, `self._ioc.session`, `self._ioc.redis`, `self._ioc.settings`, `self._ioc.<OtherService>`.
+- `*Service`, `*Storage`, and `*Mapper` constructors take exactly one argument: `ioc: Ioc`.
+- Concrete services extend `AbstractService` (`app/services/abstract_service.py`); concrete storages extend `AbstractStorage` (`app/storages/abstract_storage.py`). The base class owns `__init__(self, ioc)` and stores `self._ioc = ioc`. Concrete classes do not declare their own `__init__`.
+- Collaborators and resources are pulled lazily inside methods via `self.X` (delegated to `self._ioc` by the base `__getattr__`): `self.RefreshTokenStorage`, `self.session`, `self.redis`, `self.settings`, `self.<OtherService>`, `self.claims`. Business code never names `ioc` or `self._ioc`.
 - No injected collaborator parameter lists. No `Depends(get_xyz_service)` chains.
-- Resolved `*Service` / `*Storage` instances are memoized for the lifetime of one `Ioc` (same instance returned on repeated access within a request).
+- Resolved `*Service` / `*Storage` / `*Mapper` instances are memoized for the lifetime of one `Ioc` (same instance returned on repeated access within a request).
 
 ## Factory Contract
 
 - `*Request` resolves to a `GenericFactory`. `ioc.LoginRequest.get(email=..., password=...)` constructs the instance. `ioc.LoginRequest.target` is the class.
 - `*Error` resolves to an `ErrorFactory`. `ioc.InvalidCredentialsError.get("message")` constructs the error. `ioc.InvalidCredentialsError.target` is the class.
 - Request models are normally constructed by FastAPI from the request body; the factory exists for explicit construction and symmetry with the CloudSale PHP pattern.
-- Errors are raised, not injected: `raise ioc.InvalidTokenError.get("...")`.
-- Controllers catch container errors by class: `except ioc.InvalidTokenError.target:`.
+- Errors are raised, not injected: in business code `raise self.InvalidTokenError.get("...")`.
+- Controllers catch container errors by class: `except self.InvalidTokenError.target:`.
+
+## Base Classes (self.X Access)
+
+The `Ioc` container is invisible to business code. Controllers, services, and storages access collaborators and request-scoped resources through `self.X`, mirroring the CloudSale PHP `$this->AuthService` ergonomics. Three base classes provide this:
+
+| Base class | File | Used by | Carries `Depends(get_ioc)` |
+|---|---|---|---|
+| `BaseController` | `app/controllers/base_controller.py` | controllers | yes |
+| `AbstractService` | `app/services/abstract_service.py` | services | no |
+| `AbstractStorage` | `app/storages/abstract_storage.py` | storages | no |
+
+Mechanism:
+
+1. Each base class defines `__init__(self, ioc)` storing `self._ioc = ioc`. `BaseController.__init__` declares `ioc: Ioc = Depends(get_ioc)` so the FastAPI dependency lives only in the base class. `AbstractService` / `AbstractStorage` take a plain `ioc: Ioc` (supplied by the IoC resolver when it instantiates the class via `target(self)`).
+2. Each base class defines `__getattr__(self, name)` that delegates missing-attribute lookups to `getattr(self._ioc, name)`.
+3. `__getattr__` guards leading-underscore names: `if name.startswith("_"): raise AttributeError(name)`. This prevents infinite recursion before `_ioc` is assigned and stops dunder/introspection lookups (e.g. `__deepcopy__`) from triggering IoC resolution.
+
+Constraints:
+
+- Business code (controllers, services, storages) must never name `ioc` or `self._ioc`. The tokens `ioc.` and `self._ioc.` appear only inside the base classes and `app/infrastructure/ioc.py`.
+- A typo such as `self.AuthServ` is forwarded to the container and raises `IocResolutionError` (an `AttributeError` subclass) naming the bad attribute and the suffix rules.
 
 ## Caching
 
@@ -75,33 +105,51 @@ snake_case conversion: insert `_` before every uppercase letter that is not the 
 
 ## Controller Usage
 
+Controllers are classes extending `BaseController`. The `Depends(get_ioc)` injection lives in the base class, so routes inject the controller class itself via `Depends(<Controller>)` and stay thin.
+
 ```python
-from app.infrastructure.ioc import Ioc, get_ioc
+from app.controllers.base_controller import BaseController
+
+class AuthController(BaseController):
+    async def login(self, body: LoginRequest) -> dict:
+        try:
+            return await self.AuthService.login(email=body.email, password=body.password)
+        except self.InvalidCredentialsError.target:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @router.post("/login")
-async def login(body: LoginRequest, ioc: Ioc = Depends(get_ioc)) -> dict:
-    try:
-        return await ioc.AuthService.login(email=body.email, password=body.password)
-    except ioc.InvalidCredentialsError.target:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+async def login(body: LoginRequest, ctrl: AuthController = Depends(AuthController)) -> dict:
+    return await ctrl.login(body)
 ```
 
-- `get_ioc` is the only `Depends` a controller uses for dependencies.
-- Wrap mutations: `await ioc.transaction.wrap(ioc.session, service_method, ...)`.
+- Routes declare no `ioc` parameter and no `Depends(get_ioc)`. FastAPI resolves `BaseController.__init__`'s inherited `ioc: Ioc = Depends(get_ioc)` transitively when it instantiates the controller for `Depends(AuthController)`.
+- Wrap mutations: `await self.transaction.wrap(self.session, service_method, ...)`.
 
 ## Service Usage
 
-```python
-class AuthService:
-    def __init__(self, ioc: Ioc) -> None:
-        self._ioc = ioc
+Services extend `AbstractService` and access everything through `self.X`. No `__init__` is declared on the concrete class.
 
+```python
+from app.services.abstract_service import AbstractService
+
+class AuthService(AbstractService):
     async def refresh(self, refresh_token: str) -> dict:
-        refresh_storage = self._ioc.RefreshTokenStorage
-        settings = self._ioc.settings
-        redis = self._ioc.redis
+        refresh_storage = self.RefreshTokenStorage
+        settings = self.settings
         ...
-        raise self._ioc.InvalidTokenError.get("Refresh token is invalid or has expired")
+        raise self.InvalidTokenError.get("Refresh token is invalid or has expired")
+```
+
+## Storage Usage
+
+Storages extend `AbstractStorage` and read request-scoped resources through `self.X` (`self.session`, `self.tenant_id`, `self.redis`). Resources are not passed as method parameters.
+
+```python
+from app.storages.abstract_storage import AbstractStorage
+
+class RefreshTokenStorage(AbstractStorage):
+    async def delete(self, token: str) -> None:
+        await self.redis.delete(f"refresh:{token}")
 ```
 
 ## Adding a New Dependency
@@ -111,16 +159,17 @@ class AuthService:
    - Storage: `app/storages/<thing>_storage.py` exporting `<Thing>Storage`.
    - Request: `app/requests/<domain>/<action>_request.py` exporting `<Action>Request`.
    - Error: `app/errors/<domain>/<thing>_error.py` exporting `<Thing>Error`.
-2. For services/storages, accept `ioc: Ioc` in `__init__` and store it.
-3. Resolve it where needed via `ioc.<ClassName>`. No registration step is required — resolution is by convention.
+2. For services extend `AbstractService`; for storages extend `AbstractStorage`. Do not declare `__init__` — the base class owns it.
+3. Resolve collaborators where needed via `self.<ClassName>` inside methods. No registration step is required — resolution is by convention.
 
 ## Security Properties
 
-- `tenant_id` is sourced only from verified JWT claims in `get_ioc` (`decode_access_token`). It is never read from request body or query parameters and has no setter.
+- `claims` (full `TokenData`) and `tenant_id` are established once per request by `AuthMiddleware` (`app/infrastructure/auth_middleware.py`), which runs before any route handler and attaches the verified `TokenData` to `request.state.token_data`. `get_ioc` reads that value from `request.state` and never decodes a token itself, so the middleware is the single source of identity. Identity is sourced only from verified JWT claims or, for external clients, from the user record resolved by `ApiKeyStorage` — never from request body or query parameters — and has no setter.
+- `ActiveUserMapper` identity properties (`user_id`, `tenant_id`, `role`) raise `UnauthenticatedError` when `claims` is `None`. Do not access identity properties on public routes without guarding with `is_initialized()` first.
 - Container attribute names are always literals in source code. No code path passes user input into `getattr(ioc, ...)` or `ioc.<x>`. The dynamic `importlib` resolution therefore cannot be driven by user input.
-- Package scanning is bounded to the four fixed roots (`app.services`, `app.storages`, `app.requests`, `app.errors`). Resolution cannot import modules outside `app.*`.
+- Package scanning is bounded to the five fixed roots (`app.services`, `app.storages`, `app.mappers`, `app.requests`, `app.errors`). Resolution cannot import modules outside `app.*`.
 - The container is request-scoped; the session and per-request instances are never shared across requests. Only immutable class objects are cached at process level.
-- `get_ioc` is not an authentication gate. Authenticated routes must enforce auth with `get_current_user` (or an equivalent dependency) in addition to obtaining the container.
+- `get_ioc` is not an authentication gate. It only reads the identity that `AuthMiddleware` established on `request.state`. Authenticated routes must still enforce auth with `get_current_user` (or an equivalent dependency) in addition to obtaining the container. The middleware itself stays non-blocking for the JWT path (a malformed/expired bearer is treated as anonymous so public routes keep working); the one exception is the API-key path, where a *presented* API key that cannot be resolved returns 401 immediately rather than downgrading to anonymous.
 
 ## Error Reference
 

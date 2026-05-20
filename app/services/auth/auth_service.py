@@ -14,10 +14,6 @@ _DUMMY_HASH = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
 
 class AuthService(AbstractService):
     async def login(self, email: str, password: str) -> dict:
-        """
-        Verify credentials and return access + refresh tokens.
-        Always runs bcrypt for unknown users to prevent timing-based enumeration.
-        """
         settings = self.settings
         db_name = settings.alembic_shared_db
         user_lookup = self.NotImplementedUserLookupService
@@ -56,10 +52,6 @@ class AuthService(AbstractService):
         }
 
     async def refresh(self, refresh_token: str) -> dict:
-        """
-        Validate the refresh token in Redis, rotate it, and return a new access token.
-        Raises InvalidTokenError if the token is not found or already revoked.
-        """
         settings = self.settings
         refresh_storage = self.RefreshTokenStorage
 
@@ -96,6 +88,5 @@ class AuthService(AbstractService):
         }
 
     async def logout(self, refresh_token: str) -> None:
-        """Revoke the refresh token. Idempotent — no error if already absent."""
         refresh_storage = self.RefreshTokenStorage
         await refresh_storage.delete(refresh_token)

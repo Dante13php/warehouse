@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class UserStorage(AbstractStorage):
     """Loads the full user record for the request's verified identity.
 
-    ``CurrentUserMapper`` calls :meth:`get_by_id` lazily on first access to the
+    ``ActiveUserMapper`` calls :meth:`get_by_id` lazily on first access to the
     full user profile, mirroring the CloudSale ``ActiveUserMapper`` concept where
     the mapper holds the DB-loaded user object (not just token claims). Identity
     (``user_id`` / ``tenant_id`` / ``role``) is established by the auth middleware

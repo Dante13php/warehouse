@@ -26,6 +26,23 @@ All infrastructure services run in Docker. The local development environment use
 
 The FastAPI application itself runs locally (outside Docker) during development and connects to the Dockerized services. Never hardcode connection strings — all service URLs and credentials are supplied via environment variables.
 
+## Agent Models
+
+Every agent definition in `.claude/agents/` specifies a `Model` field. When spawning any agent via the `Agent` tool, the `model` parameter **must** match the model declared in that agent's `.md` file. Never omit the `model` parameter or let it inherit from the parent — always set it explicitly.
+
+| Agent | Model |
+|---|---|
+| orchestrator | opus |
+| planner | opus |
+| implementer | sonnet |
+| reviewer | sonnet |
+| database | opus |
+| security | opus |
+| docs-writer | haiku |
+| spec-writer | haiku |
+| ui-designer | sonnet |
+| version-control | haiku |
+
 ## Key References
 
 - `.claude/agents/` — agent definitions

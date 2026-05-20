@@ -29,7 +29,7 @@ Every section follows the same shape:
 | 2 | GenericFactory / DataFactory / ErrorFactory | `infrastructure/*Factory.php` | `app/infrastructure/ioc.py` | Partial |
 | 3 | AbstractController | `controllers/AbstractController.php` | `app/controllers/base_controller.py` | Built |
 | 4 | AbstractService | `services/AbstractService.php` | `app/services/abstract_service.py` | Built |
-| 4a | AbstractMapper / ActiveUserMapper (context holder) | `mappers/AbstractMapper.php`, `mappers/ActiveUserMapper.php` | `app/mappers/abstract_mapper.py`, `app/mappers/current_user_mapper.py` | Built |
+| 4a | AbstractMapper / ActiveUserMapper (context holder) | `mappers/AbstractMapper.php`, `mappers/ActiveUserMapper.php` | `app/mappers/abstract_mapper.py`, `app/mappers/active_user_mapper.py` | Built |
 | 5 | AbstractStorage | `storages/AbstractStorage.php` | `app/storages/abstract_storage.py` | Partial |
 | 6 | AbstractData (value object) | `data/AbstractData.php` | `app/data/abstract_data.py` | Built |
 | 7 | AbstractDataCollection | `data/AbstractDataCollection.php` | `app/data/data_collection.py` | Built |
@@ -434,12 +434,12 @@ class AbstractMapper:
         return getattr(self._ioc, name)
 ```
 
-`app/mappers/current_user_mapper.py` — `CurrentUserMapper` (Warehouse equivalent
-of `ActiveUserMapper`). Reads verified JWT claims from `ioc.claims` (`TokenData |
+`app/mappers/active_user_mapper.py` — `ActiveUserMapper` (Warehouse equivalent
+of CloudSale's `ActiveUserMapper`). Reads verified JWT claims from `ioc.claims` (`TokenData |
 None`) — no explicit `init()` step required:
 
 ```python
-class CurrentUserMapper(AbstractMapper):
+class ActiveUserMapper(AbstractMapper):
     def is_initialized(self) -> bool: ...     # True when ioc.claims is not None
     @property
     def user_id(self) -> str: ...             # claims.sub; raises UnauthenticatedError if no claims

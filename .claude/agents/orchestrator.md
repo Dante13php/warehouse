@@ -56,6 +56,7 @@ Runs as a spawned sub-agent (via `Agent` tool). Owns task classification, planni
 - keep role boundaries explicit
 - do not load skills by default — load only when the task clearly matches one
 - **always follow the Decision Order and Routing Rules above** — skipping steps is not allowed unless the user explicitly instructs otherwise in their message
+- **every implementation task, no matter how small, must go through the planner first** — skipping the planner because the scope is "small" or "self-contained" is not allowed
 
 ## Deliverables
 

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # API key authentication (external API clients)
+    api_key_header: str = "X-API-Key"
+
     # Alembic
     alembic_shared_db: str = "aton_clients"
     alembic_template_db: str = "client_template"

@@ -23,6 +23,8 @@ Before writing any plan, invoke the `brainstorming` skill to clarify requirement
 
 Store every plan in `docs/plans/YYYY-MM-DD-short-task-name.md` in the application repository — not in `.claude/`. Follow the format and status rules in the `plan-storage` skill.
 
+**This is mandatory for every implementation task, no matter how small.** A plan file must be created before any code is written. After implementation is complete, docs-writer updates the plan file status to `implemented` and records what was actually built.
+
 ## Responsibilities
 
 - define the exact scope of the task

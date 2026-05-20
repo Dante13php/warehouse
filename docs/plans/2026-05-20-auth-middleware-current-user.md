@@ -1,4 +1,4 @@
-# Auth Middleware + CurrentUserMapper Initialization (JWT + API key)
+# Auth Middleware + ActiveUserMapper Initialization (JWT + API key)
 
 ## Status
 
@@ -24,7 +24,7 @@ requirements:
 2. Authentication must happen **before** the controllers — in middleware.
 3. In the future, an **API key** per user (for external API clients) will be used.
 4. The UI will use a **JWT session** (refresh-token flow — already implemented).
-5. Both paths must initialize `CurrentUserMapper` with the user's identity.
+5. Both paths must initialize `ActiveUserMapper` with the user's identity.
 6. The concept must be identical: middleware / before-controller logic initializes the
    mapper; controllers only read from it.
 7. Fix documentation / MD files where needed at the end.
@@ -38,7 +38,7 @@ requirements:
   satisfy requirement #2 ("auth must happen before controllers, in middleware").
 - `app/mappers/abstract_mapper.py` — `AbstractMapper`, the Python equivalent of
   `AbstractMapper.php` (lazy IoC access via `self.X`). Already correct, no change needed.
-- `app/mappers/current_user_mapper.py` — `CurrentUserMapper`, the Python equivalent of
+- `app/mappers/active_user_mapper.py` — `ActiveUserMapper`, the Python equivalent of
   `ActiveUserMapper.php`. Reads identity from `self._ioc.claims`. Has `is_initialized()`,
   `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`. Identity properties raise
   `UnauthenticatedError` when claims are absent. Has a documented extension point for
@@ -69,7 +69,7 @@ inspection, but relocated to middleware per requirement #2.
 ## Scope
 
 A middleware-driven identity-initialization layer with two pluggable strategies, feeding a
-single `CurrentUserMapper`, while keeping controllers free of auth logic.
+single `ActiveUserMapper`, while keeping controllers free of auth logic.
 
 ### 1. Authentication middleware (new) — `app/infrastructure/auth_middleware.py`
 
@@ -109,9 +109,9 @@ first access in the mapper.
 - Backward-compat: if `request.state.token_data` is unset (e.g. middleware not yet run in a
   test harness), fall back to `None` (anonymous). No silent re-decode.
 
-### 3. `CurrentUserMapper` — confirm it is the single read surface (small additions)
+### 3. `ActiveUserMapper` — confirm it is the single read surface (small additions)
 
-`app/mappers/current_user_mapper.py`:
+`app/mappers/active_user_mapper.py`:
 
 - Keep reading identity from `self._ioc.claims`. No structural change to existing properties.
 - Add identity accessor parity with the PHP mapper where it makes sense and is backed by
@@ -151,8 +151,8 @@ database agent must own.
   `get_ioc` not being an auth gate to reference the middleware.
 - `.claude/rules/RULES.md` — update the **Authentication** subsection: "Token verification
   happens in middleware" is already stated; add the API-key second strategy and the
-  `CurrentUserMapper` single-read-surface rule, and that controllers only read identity via
-  `self.CurrentUserMapper`.
+  `ActiveUserMapper` single-read-surface rule, and that controllers only read identity via
+  `self.ActiveUserMapper`.
 - `CLAUDE.md` — confirm the Infrastructure/auth description still matches; adjust only if a
   statement becomes inaccurate.
 - `docs/application-stack/auth.md` (if present) — add the middleware + API-key flow.
@@ -177,10 +177,10 @@ database agent must own.
 
 - A request with a valid `Authorization: Bearer <jwt>` results in
   `request.state.token_data` being set by the middleware, `ioc.claims` returning that
-  `TokenData`, and `CurrentUserMapper.is_initialized()` returning `True` with correct
+  `TokenData`, and `ActiveUserMapper.is_initialized()` returning `True` with correct
   `user_id` / `tenant_id` / `role`.
 - A request with no credentials results in `ioc.claims is None` and
-  `CurrentUserMapper.is_initialized()` returning `False`; public routes still succeed.
+  `ActiveUserMapper.is_initialized()` returning `False`; public routes still succeed.
 - A request with a malformed/expired JWT is treated as anonymous by the middleware (no
   500), and protected routes still return 401 via `get_current_user`.
 - The API-key branch is wired: a request carrying the configured API-key header invokes
@@ -190,7 +190,7 @@ database agent must own.
   `request.state.token_data` set by the middleware (verified by reading the source: the
   `decode_access_token` call is gone from `get_ioc`).
 - Controllers contain no auth/identity-resolution logic; they only read
-  `self.CurrentUserMapper`. `BaseController` is unchanged in responsibility.
+  `self.ActiveUserMapper`. `BaseController` is unchanged in responsibility.
 - `tenant_id` / `role` are still sourced only from verified JWT claims or the API-key
   lookup result — never from request body/query.
 - `python -c "import app.main"` imports cleanly with the middleware registered.
@@ -205,7 +205,7 @@ database agent must own.
 | `app/infrastructure/ioc.py` | updated (`get_ioc` reads `request.state.token_data`; drop in-dependency decode) | implementer |
 | `app/storages/api_key_storage.py` | created (interface + inert stub) | implementer |
 | `app/infrastructure/settings.py` | updated (`api_key_header` setting) | implementer |
-| `app/mappers/current_user_mapper.py` | updated only if open Q1/Q3 require it | implementer |
+| `app/mappers/active_user_mapper.py` | updated only if open Q1/Q3 require it | implementer |
 | `app/main.py` | updated (register middleware) | implementer |
 | `docs/architecture/IOC.md` | updated | docs-writer |
 | `.claude/rules/RULES.md` | updated (Authentication section) | docs-writer |
@@ -255,20 +255,20 @@ database agent must own.
 
 1. **API-key resolution location**: resolve the API key to a user **in the middleware**
    (eager, attaches full `TokenData` like the JWT path) — recommended for symmetry — or
-   **lazy** in `CurrentUserMapper` on first access (closer to the PHP "lazy-load API key
+   **lazy** in `ActiveUserMapper` on first access (closer to the PHP "lazy-load API key
    from Storage")? Recommendation: **eager in middleware**, so both strategies converge on
-   the same `request.state.token_data` and `CurrentUserMapper` stays a pure reader.
+   the same `request.state.token_data` and `ActiveUserMapper` stays a pure reader.
 2. **Stub behavior for `ApiKeyStorage`**: return `None` (treat as anonymous, no crash) or
    raise `NotImplementedError` (loud, like `NotImplementedUserLookupService`)?
    Recommendation: **return `None`** so the API-key branch is non-fatal until the table
    exists, while keeping the wiring present.
-3. **Method naming on `CurrentUserMapper`**: keep the existing Pythonic properties
+3. **Method naming on `ActiveUserMapper`**: keep the existing Pythonic properties
    (`user_id`, `role`, `is_admin()`, `is_manager()`) rather than mirroring the PHP method
    names (`getId()`, `isWaiter()`)? Recommendation: **keep Pythonic** — RULES mandates
    `snake_case` methods/properties and the warehouse domain has no "waiter" role.
 4. **Credential precedence** when both bearer JWT and API key are present.
    Recommendation: **JWT wins**, API key is only tried when no valid JWT is present.
-5. **`CurrentUserMapper` profile lazy-load**: implement the documented `get_profile()`
+5. **`ActiveUserMapper` profile lazy-load**: implement the documented `get_profile()`
    extension point now (needs `UserStorage`, which doesn't exist) or leave it as a
    documented extension point? Recommendation: **leave as extension point** (out of scope
    until `UserStorage` lands).
@@ -284,12 +284,12 @@ database agent must own.
   `AuthMiddleware` (JWT + API-key strategies) created; `get_ioc` now reads
   `request.state.token_data` (no in-dependency decode); `ApiKeyStorage` inert stub added;
   `api_key_header` setting added; middleware registered in `app/main.py`; docs updated
-  (`IOC.md`, `RULES.md`, `application-stack/auth.md`). `CurrentUserMapper` unchanged
+  (`IOC.md`, `RULES.md`, `application-stack/auth.md`). `ActiveUserMapper` unchanged
   (Pythonic accessors kept). Verified via TestClient: valid JWT → identity; no creds →
   anonymous; malformed JWT → anonymous; presented API key → 401; JWT+API key → JWT wins.
 - 2026-05-20: post-implementation adjustments per user feedback (referencing
   `docs/architecture/ActiveUserMapper.php`):
-  - **`CurrentUserMapper` now holds the full user record**, not just JWT claims —
+  - **`ActiveUserMapper` now holds the full user record**, not just JWT claims —
     the Python equivalent of `ActiveUserMapper` holding `$userData`. Claim-backed
     identity (`user_id`/`tenant_id`/`role`, `is_admin()`/`is_manager()`) stays a
     cheap no-DB read; the full `AuthUser` is lazy-loaded and memoized via
@@ -308,6 +308,6 @@ database agent must own.
     404 — required because an exception raised inside `BaseHTTPMiddleware` would
     otherwise become a 500.
   Verified via TestClient: presented API key → 404 (not-implemented);
-  `CurrentUserMapper.load()` → 404 from `UserStorage` stub; valid JWT → identity
+  `ActiveUserMapper.load()` → 404 from `UserStorage` stub; valid JWT → identity
   with no DB hit; anonymous and malformed-JWT paths unchanged; JWT+API key → JWT
   wins. App still imports cleanly.

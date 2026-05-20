@@ -39,7 +39,7 @@ class ApiKeyStorage(AbstractStorage):
         )
 
     async def get_api_key_by_user_id(self, user_id: str) -> str | None:
-        # Reverse lookup used by CurrentUserMapper.get_api_key() (mirrors the
+        # Reverse lookup used by ActiveUserMapper.get_api_key() (mirrors the
         # CloudSale ActiveUserMapper lazy API-key load). Unimplemented until the
         # api_keys table exists; raise 404 to make that explicit.
         logger.debug("ApiKeyStorage stub invoked; no api_keys table yet, raising 404.")

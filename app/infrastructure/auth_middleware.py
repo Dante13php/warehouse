@@ -26,7 +26,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     This is the single place authentication happens. It mirrors the CloudSale
     ``BaseController`` "initialize the active user if not initialized" concept,
     relocated to middleware so controllers stay free of auth logic and only read
-    identity through ``CurrentUserMapper``.
+    identity through ``ActiveUserMapper``.
 
     Two pluggable strategies, tried in precedence order:
 
