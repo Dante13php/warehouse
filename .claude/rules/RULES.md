@@ -72,7 +72,36 @@ Controller → Request → Service → Storage → Data ↔ Database
 - Implemented as Python `dataclass`
 - Field names match DB column names exactly
 - `from_row` is a `@classmethod` factory
-- No business logic, no methods beyond `__init__` and `from_row`
+- No business logic; field/type plumbing only (`from_row`, `fix_type`, `to_dict`) — no domain logic
+- Entity Data classes that need type coercion, a field whitelist, expanded child fields, or `to_dict()` serialization extend `AbstractData` (`app/data/abstract_data.py`)
+- Auth identity Data (`AuthUser`, `TokenData`) stays a plain `@dataclass` — no expanded fields, and `password_hash` must never be serialized via `to_dict()`
+
+**AbstractData** (`app/data/abstract_data.py`)
+- Base mixin for `@dataclass` Data classes; field storage stays the dataclass mechanism (no shadow object)
+- `FIELDS: ClassVar[dict[str, str]]` — subclass declares `{field_name: type_token}`; it is the authoritative field whitelist and the source for type coercion
+- Type tokens: `int`, `float`, `string`, `bool`, `datetime`, `expanded` (module constants `INT`, `FLOAT`, `STRING`, `BOOL`, `DATETIME`, `EXPANDED`)
+- `expanded` marks list-valued nested child fields; declare them `field(default_factory=list)`; they are NOT read from the DB row by the default `from_row` (default `[]`) and are populated later by `DataCollection.expand_property`
+- `from_row(cls, row)` maps `FIELDS` keys and applies `fix_type` per field; subclasses may override
+- `fix_type(token, value)`: `None` passes through; primitives cast; `datetime` -> tz-aware UTC; `expanded`/unknown -> value unchanged
+- Field guard: `__setattr__` rejects writes to names not in `FIELDS` (leading-underscore/dunder allowed)
+- `to_dict()` returns the field map in `FIELDS` order (includes `expanded` fields)
+
+**DataCollection** (`app/data/data_collection.py`)
+- Generic typed wrapper around `list[T]` (`T = TypeVar("T", bound=AbstractData)`); thin wrapper, not a framework
+- Construct with `DataCollection(items=None)` (no mutable default); `add(item)`
+- Sequence protocol: `__iter__`, `__len__`, `__getitem__`, `__bool__`
+- `expand_property(expanded_property, group_key_property, grouped_values)` — attaches grouped children onto each parent: `item.<expanded_property> = grouped_values.get(item.<group_key_property>, [])` (missing key -> `[]`); single-level parent->children only
+- `extract_property_values(name)`, `extract_property_values_as_keys(name)`, `group_by_property(name)`
+- `to_list()`, `to_dicts()` for response shaping
+- Sorting uses `sorted(collection, key=...)` — no sorter methods on the collection
+
+**Expand pattern** (`app/helpers/expand_validator.py`)
+- `?expand=` is user input; the per-endpoint `expandable` spec `{resource: [allowed_field, ...]}` is the trust boundary
+- `validate_expand(raw, expandable) -> dict[str, list[str]]` parses `resource[f1,f2],other` and whitelists it: rejects resources not in `expandable`, rejects fields not in `expandable[resource]`, expands a bracket-less resource to all `expandable[resource]` fields, returns `{}` for `None`/empty
+- Any malformed input or whitelist violation raises `RequestValidationError`, routed through the unified `V001` 422 envelope
+- `expand_dependency(expandable)` returns a FastAPI `Query`-bound dependency for controllers
+- Never pass un-whitelisted resource/field names into `getattr`, dynamic class resolution, or SQL identifiers — only the validated output is safe to use as response keys or to select which child storages to load
+- Service usage: `result = validate_expand(...)`; `if "products" in result: load children, group_by_property(fk), collection.expand_property("products", parent_key, grouped)`
 
 **Error**
 - Extend `ApplicationError`
@@ -152,8 +181,11 @@ app/
   services/{domain}/
   storages/
   data/
+    abstract_data.py      # AbstractData base (FIELDS, expanded token, from_row, fix_type, to_dict, field guard)
+    data_collection.py    # DataCollection[T] (expand_property, extract/group, to_dicts)
   errors/{domain}/
   helpers/
+    expand_validator.py   # validate_expand + expand_dependency (expand whitelisting)
   infrastructure/
 main.py
 ```

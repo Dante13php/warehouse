@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# Auth identity data stays a plain @dataclass (NOT AbstractData): it has no
+# expanded fields and no type-coercion need (from_row already casts), and it
+# carries password_hash which must never be serialized via to_dict(). Adding an
+# AbstractData FIELDS map / to_dict() here would create a credential-leak risk
+# with no current benefit.
 @dataclass
 class AuthUser:
     id: str

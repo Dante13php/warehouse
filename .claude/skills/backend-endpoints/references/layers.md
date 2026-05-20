@@ -27,8 +27,11 @@
 
 - One class per entity, implemented as a Python `dataclass`.
 - Field names match DB column names exactly.
-- `from_row` is a `@classmethod` factory. No business logic beyond `__init__` and `from_row`.
+- `from_row` is a `@classmethod` factory. No business logic; only field/type plumbing (`from_row`, `fix_type`, `to_dict`).
 - When a DB result row already has the needed shape, pass it directly into `from_row(...)` instead of casting it first.
+- Entity Data classes that need type coercion, a field whitelist, expanded child fields, or `to_dict()` serialization extend `AbstractData` (`app/data/abstract_data.py`): declare `FIELDS = {field: type_token}` with tokens `int`/`float`/`string`/`bool`/`datetime`/`expanded`. `expanded` fields hold nested children (`field(default_factory=list)`), are not read from the row, and are filled by `DataCollection.expand_property`.
+- Auth identity Data (`AuthUser`, `TokenData`) stays a plain `@dataclass` — no expanded fields and `password_hash` must never be serialized.
+- A `DataCollection[T]` (`app/data/data_collection.py`) wraps `list[T]` and adds `expand_property`, `extract_property_values`, `extract_property_values_as_keys`, `group_by_property`, `to_list`, `to_dicts`. Use it as the storage collection return type and for in-memory parent->children expand.
 
 ## Consistency
 
