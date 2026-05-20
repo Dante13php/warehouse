@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from app.data.auth_user import AuthUser
-
-if TYPE_CHECKING:
-    from app.infrastructure.ioc import Ioc
+from app.services.abstract_service import AbstractService
 
 
 class UserLookup(Protocol):
@@ -13,10 +11,7 @@ class UserLookup(Protocol):
         ...
 
 
-class NotImplementedUserLookupService:
-    def __init__(self, ioc: Ioc) -> None:
-        self._ioc = ioc
-
+class NotImplementedUserLookupService(AbstractService):
     async def get_by_email(self, email: str, db_name: str) -> AuthUser | None:
         raise NotImplementedError(
             "UserLookup is not yet implemented. "
