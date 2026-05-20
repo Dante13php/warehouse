@@ -1,0 +1,18 @@
+[project]
+name = "warehouse"
+version = "0.1.0"
+description = "Warehouse and inventory management system"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "redis[hiredis]",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "arq",
+    "pydantic",
+    "pydantic-settings",
+]

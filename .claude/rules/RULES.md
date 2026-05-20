@@ -46,8 +46,8 @@ Controller → Request → Service → Storage → Data ↔ Database
 **Controller**
 - No business logic
 - No direct database access
-- Lazy-resolve services on demand
-- Wrap all mutations using `transaction_helper.wrap(db, ...)`
+- Obtain all dependencies through the IoC container (`ioc: Ioc = Depends(get_ioc)`); resolve services on demand via `ioc.<ClassName>`
+- Wrap all mutations using `ioc.transaction.wrap(ioc.session, ...)`
 
 **Request**
 - All validation here, never in services
@@ -110,10 +110,27 @@ Controller → Request → Service → Storage → Data ↔ Database
 - Token verification happens in middleware — controllers receive an already-verified identity object
 - Never trust `tenant_id` or `role` from request body or query params — always read from verified token claims
 
+### Dependency Injection
+
+The official DI mechanism is the per-request **IoC container** (`app/infrastructure/ioc.py`). Full specification: `docs/architecture/IOC.md`.
+
+- One `Ioc` instance is created per HTTP request via the `get_ioc` FastAPI dependency. It is request-scoped — never an app-level singleton, never cached at module level.
+- The container carries the request's `session` (`AsyncSession | None`), `tenant_id` (`str | None`, from verified JWT claims only), `redis`, and `settings`.
+- Dependencies are resolved by **class name** through `__getattr__`, using a suffix → layer convention:
+  - `*Service` → `app.services` (nested by domain) → memoized request-scoped instance
+  - `*Storage` → `app.storages` (flat) → memoized request-scoped instance
+  - `*Request` → `app.requests` (nested by domain) → `GenericFactory`; call `.get(...)` to construct
+  - `*Error` → `app.errors` (nested by domain) → `ErrorFactory`; call `.get(...)` to construct, `.target` for the class
+- Resolution is **convention-strict (Strategy B)**: a resolvable class lives in a module whose file name is the snake_case of the class name. `AuthService` → `auth_service.py`; `RefreshTokenStorage` → `refresh_token_storage.py`; `InvalidCredentialsError` → `invalid_credentials_error.py`.
+- Service and storage constructors take a single argument `ioc: Ioc` and pull collaborators and resources lazily (`self._ioc.RefreshTokenStorage`, `self._ioc.session`, `self._ioc.redis`, `self._ioc.settings`). No injected collaborator parameter lists.
+- `get_ioc` is the only `Depends` controllers use. It bootstraps the container; it is not an authentication gate — authenticated routes must still enforce auth with `get_current_user` (or equivalent).
+- Resolution names are always literals in source (`ioc.AuthService`); never derive a container attribute name from request data.
+- Unknown names raise `IocResolutionError` (an `AttributeError` subclass) — never a silent `None`.
+
 ### Anti-Patterns
 
 ❌ Manager / Repository pattern — use Storage
-❌ Service Locator — use constructor injection or dependency injection
+❌ Manual DI wiring — no `Depends(get_xyz_service)` chains, no injected collaborator constructor lists; resolve through the IoC container (see Dependency Injection)
 ❌ Facade — expose layers directly
 ❌ Hidden layers — all layers explicit in folder structure
 ❌ DI in abstract classes — keep abstract classes pure
