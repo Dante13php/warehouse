@@ -1,0 +1,117 @@
+<h2>Foundation — какво строим?</h2>
+<p class="subtitle">Потвърди обхвата на "основата" преди да продължим с детайлите</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Предложена архитектура на основата</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.8; padding: 20px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #a78bfa; font-weight: bold; margin-bottom: 12px; font-size: 14px;">① PROJECT STRUCTURE</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            app/controllers/<br>
+            app/requests/<br>
+            app/services/<br>
+            app/storages/<br>
+            app/data/<br>
+            app/errors/<br>
+            app/helpers/<br>
+            app/infrastructure/<br>
+            alembic/<br>
+            docker-compose.yml
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #34d399; font-weight: bold; margin-bottom: 12px; font-size: 14px;">② MULTI-TENANCY</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            aton_clients база — клиентски регистър<br>
+            client_{slug} база per клиент<br>
+            Database router (от JWT claims)<br>
+            Dynamic engine factory (SQLAlchemy)<br>
+            Multi-DB Alembic runner
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #f59e0b; font-weight: bold; margin-bottom: 12px; font-size: 14px;">③ AUTH</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            JWT access token (15–60 мин)<br>
+            Refresh token в Redis<br>
+            POST /auth/login<br>
+            POST /auth/refresh<br>
+            POST /auth/logout<br>
+            claims: sub, tenant_id, role, exp
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #fb7185; font-weight: bold; margin-bottom: 12px; font-size: 14px;">④ USERS</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            users table<br>
+            роли: manager / staff<br>
+            password hashing (bcrypt)<br>
+            GET /users/me<br>
+            CRUD за managers<br>
+            tenant-scoped
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #38bdf8; font-weight: bold; margin-bottom: 12px; font-size: 14px;">⑤ INFRASTRUCTURE</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            SQLAlchemy async engine<br>
+            Dynamic engine factory<br>
+            asyncpg + PgBouncer<br>
+            Redis connection pool<br>
+            Alembic migrations<br>
+            TransactionHelper<br>
+            logging setup
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a8a; border-radius: 8px; padding: 16px;">
+          <div style="color: #e879f9; font-weight: bold; margin-bottom: 12px; font-size: 14px;">⑥ DOCKER</div>
+          <div style="color: #94a3b8; font-size: 12px; line-height: 2;">
+            PostgreSQL (aton_clients + client DBs)<br>
+            PgBouncer<br>
+            Redis<br>
+            ARQ worker<br>
+            .env за credentials<br>
+            health checks
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Всичко това е включено в "основата" ли?</h3>
+  <p class="subtitle">Или искаш да изключиш или добавиш нещо?</p>
+  <div class="options">
+    <div class="option" data-choice="all-in" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Да, точно това</h3>
+        <p>Всичките 6 блока са включени — пълна основа</p>
+      </div>
+    </div>
+    <div class="option" data-choice="minimal" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>По-минимално за начало</h3>
+        <p>Само структура + инфраструктура + auth, без пълен user CRUD</p>
+      </div>
+    </div>
+    <div class="option" data-choice="custom" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Искам да променя нещо</h3>
+        <p>Ще опиша какво да добавя или премахна в терминала</p>
+      </div>
+    </div>
+  </div>
+</div>

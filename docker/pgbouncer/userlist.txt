@@ -1,0 +1,8 @@
+; PgBouncer auth file — format: "username" "password-or-md5hash"
+;
+; The hash is md5 + md5(password + username). Generate with:
+;   echo -n "md5$(echo -n '<password><user>' | md5sum | cut -d' ' -f1)"
+;
+; Replace the placeholder hash below with the real one for your POSTGRES_USER.
+; Do NOT commit real credentials.
+"warehouse" "md544878fd73b828b0c871ae4f6309199bc"

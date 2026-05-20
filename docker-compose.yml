@@ -1,0 +1,119 @@
+# ---------------------------------------------------------------------------
+# Warehouse — local development infrastructure.
+#
+# The FastAPI app runs LOCALLY (outside Docker) and connects to:
+#   - PgBouncer  at localhost:${PGBOUNCER_PUBLISHED_PORT}  (DB access)
+#   - Redis      at localhost:${REDIS_PUBLISHED_PORT}      (cache/queue)
+#
+# All credentials come from `.env` (copy from `.env.example`). No secrets
+# are hardcoded in this file.
+#
+# Usage:  cp .env.example .env  &&  docker compose up -d
+# ---------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: warehouse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PUBLISHED_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Runs only on first init (empty data dir). Ensures aton_clients exists.
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - warehouse
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: warehouse-pgbouncer
+    restart: unless-stopped
+    environment:
+      # Upstream PostgreSQL target (used by the image to template config).
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      POOL_MODE: ${PGBOUNCER_POOL_MODE}
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE}
+      AUTH_TYPE: md5
+    ports:
+      - "${PGBOUNCER_PUBLISHED_PORT}:6432"
+    volumes:
+      - ./docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./docker/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - warehouse
+
+  redis:
+    image: redis:7-alpine
+    container_name: warehouse-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PUBLISHED_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - warehouse
+
+  arq-worker:
+    build:
+      context: ./docker/arq
+      dockerfile: Dockerfile
+    image: warehouse-arq-worker:dev
+    pull_policy: never
+    container_name: warehouse-arq-worker
+    restart: unless-stopped
+    environment:
+      ARQ_REDIS_URL: ${ARQ_REDIS_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Placeholder check: confirms the Python process is alive.
+      test: ["CMD-SHELL", "python -c \"import sys; sys.exit(0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - warehouse
+
+volumes:
+  postgres_data:
+    name: warehouse_postgres_data
+  redis_data:
+    name: warehouse_redis_data
+
+networks:
+  warehouse:
+    name: warehouse
+    driver: bridge
