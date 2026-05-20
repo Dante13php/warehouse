@@ -79,10 +79,7 @@ class Ioc:
         self._token_data = token_data
         self._redis = redis
         self._settings = settings
-        # Request-scoped instance cache: class name -> live instance.
         self._instances: dict[str, Any] = {}
-
-    # ----- request-scoped resources -------------------------------------
 
     @property
     def session(self) -> AsyncSession:
@@ -123,8 +120,6 @@ class Ioc:
         self._instances[cache_key] = helper
         return helper
 
-    # ----- dynamic resolution -------------------------------------------
-
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
@@ -155,7 +150,7 @@ class Ioc:
         if existing is not None:
             return existing
         suffix = self._match_suffix(name)
-        assert suffix is not None  # guaranteed by caller
+        assert suffix is not None
         target = self._load_class(name, suffix)
         instance = target(self)
         self._instances[name] = instance
@@ -201,10 +196,8 @@ async def get_ioc(
     redis: Redis = Depends(get_redis),
     settings: Settings = Depends(get_settings),
 ) -> Ioc:
-    # Identity is established once per request by ``AuthMiddleware``, which runs
-    # before any route handler and attaches the verified ``TokenData`` to
-    # ``request.state.token_data``. ``get_ioc`` never decodes a token itself —
-    # the middleware is the single source of identity. If the middleware has not
-    # run (e.g. a bare test harness), default to anonymous; no silent re-decode.
+    # AuthMiddleware is the single source of identity; get_ioc never decodes a
+    # token itself. If the middleware has not run (e.g. a bare test harness),
+    # default to anonymous rather than silently re-decoding.
     token_data: TokenData | None = getattr(request.state, "token_data", None)
     return Ioc(session=None, token_data=token_data, redis=redis, settings=settings)

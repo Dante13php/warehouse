@@ -3,8 +3,13 @@
 ## Controller
 
 - No business logic. No direct database access.
-- Lazy-resolve services on demand via FastAPI `Depends`.
-- Wrap all mutations in `transaction_helper.wrap(db, ...)`.
+- Extend `BaseController` (`app/controllers/base_controller.py`); never declare `__init__` and never name a field `ioc` or `self._ioc`.
+- Resolve services and resources on demand via the IoC container: `self.<ServiceName>`, `self.session`, `self.transaction`. There is no manual `Depends(get_xyz_service)` wiring.
+- Routes stay thin: inject the controller via `ctrl: <Controller> = Depends(<Controller>)` and delegate to a controller method. Routes carry no `ioc` parameter and no `Depends(get_ioc)`.
+- Flat-flow: no `try`/`except`. Domain errors (`ApplicationError` subclasses) bubble up to the global handler in `app/main.py`.
+- Wrap all mutations in `self.transaction.wrap(self.session, ...)`.
+- Read identity only through `self.ActiveUserMapper`; never resolve identity in the controller.
+- The controller file name is derived from the folder path under `app/controllers/`: path separators become `_`, and `{param}` segments have their braces stripped (the word stays). Examples: `controllers/auth/` → `auth.py`; `controllers/users/` → `users.py`; `controllers/users/{id}/` → `users_id.py`; `controllers/warehouses/{warehouse_id}/movements/` → `warehouses_warehouse_id_movements.py`.
 
 ## Request
 

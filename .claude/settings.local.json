@@ -49,7 +49,10 @@
       "Bash(.venv/Scripts/python.exe -)",
       "Bash(echo \"check exit: $?\")",
       "Bash(grep -n '^app/$\\\\|^**Data**')",
-      "Bash(grep -n 'app/$')"
+      "Bash(grep -n 'app/$')",
+      "Bash(python -c \"import app.infrastructure.auth_middleware; print\\('auth_middleware OK'\\)\")",
+      "Bash(./.venv/Scripts/python.exe -c \"import app.infrastructure.auth_middleware; print\\('auth_middleware OK'\\)\")",
+      "Bash(./.venv/Scripts/python.exe -c \"import app.main; print\\('app.main OK'\\)\")"
     ]
   }
 }

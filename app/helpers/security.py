@@ -17,7 +17,6 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     settings: Settings = Depends(get_settings),
 ) -> TokenData:
-    """FastAPI dependency that extracts and validates the Bearer JWT, returning TokenData."""
     try:
         return decode_access_token(token, settings)
     except JWTError:

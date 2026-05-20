@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 def create_access_token(sub: str, tenant_id: str, role: str, settings: Settings) -> str:
-    """Create a signed JWT access token with sub, tenant_id, role, and exp claims."""
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
     )
@@ -19,7 +18,6 @@ def create_access_token(sub: str, tenant_id: str, role: str, settings: Settings)
 
 
 def decode_access_token(token: str, settings: Settings) -> TokenData:
-    """Decode and validate a JWT access token. Raises JWTError on failure."""
     payload = jwt.decode(
         token,
         settings.jwt_secret_key,
