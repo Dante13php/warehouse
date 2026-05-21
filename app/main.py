@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.controllers.auth.auth import router as auth_router
+from app.controllers.users.user_id.user_id import router as users_user_id_router
 from app.controllers.users.users import router as users_router
 from app.errors.application_error import ApplicationError
 from app.infrastructure.auth_middleware import AuthMiddleware
@@ -21,6 +22,7 @@ app.add_middleware(AuthMiddleware)
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(users_user_id_router)
 
 
 def _build_validation_error_response(exc: RequestValidationError) -> dict:
