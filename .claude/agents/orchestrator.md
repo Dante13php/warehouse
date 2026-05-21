@@ -17,9 +17,10 @@ Runs as a spawned sub-agent (via `Agent` tool). Owns task classification, planni
 ## Decision Order
 
 1. **Direct answer** — question-only tasks with no code or doc changes
-2. **Full workflow** — planner → (ui-designer) → (database) → implementer → reviewer → (security) → (docs-writer) → (spec-writer) → version-control
-3. **Review only** — user asked for review without implementation
-4. **Security review only** — user asked specifically for security review
+2. **Full workflow** — planner → (ui-designer) → (database) → implementer → reviewer → (security) → (docs-writer) → (spec-writer) → context-builder → version-control
+3. **Documentation / self-improvement** — docs-writer or context-builder directly → version-control (no planner, no implementer, no opus agents)
+4. **Review only** — user asked for review without implementation
+5. **Security review only** — user asked specifically for security review
 
 ## Routing Rules
 
@@ -32,7 +33,9 @@ Runs as a spawned sub-agent (via `Agent` tool). Owns task classification, planni
 - append security agent after reviewer when the task touches auth, permissions, secrets, trust boundaries, or external I/O
 - run docs-writer after implementation and review when documentation must change
 - run spec-writer after docs-writer when the task introduces or changes user-facing functionality
+- run context-builder after docs-writer (and spec-writer when present) on every task to capture decisions, conventions, and domain rules into the context files
 - run version-control last, after all other work is done
+- **documentation-only and self-improvement tasks** (updating docs, rules, agent files, CLAUDE.md, RULES.md — no application code changes) skip planner and all opus/sonnet agents; route directly to docs-writer or context-builder (haiku), then version-control
 
 ## Agent Responsibilities
 
@@ -46,6 +49,7 @@ Runs as a spawned sub-agent (via `Agent` tool). Owns task classification, planni
 | security | reviews security concerns | replace normal review |
 | docs-writer | updates docs and plan status | change code behavior |
 | spec-writer | writes plain-language feature descriptions for non-technical users | write code or technical docs |
+| context-builder | captures task decisions, conventions, and domain rules into RULES.md/CLAUDE.md/docs | change code or create new doc files |
 | version-control | commits and merges | decide scope or review quality |
 
 ## Constraints

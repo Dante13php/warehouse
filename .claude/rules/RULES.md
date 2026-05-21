@@ -53,6 +53,10 @@ Controller → Request → Service → Storage → Data ↔ Database
 - Resolve collaborators and resources on demand via `self.<ClassName>` (e.g. `self.AuthService`, `self.InvalidCredentialsError.target`)
 - Routes stay thin: inject the controller via `ctrl: <Controller> = Depends(<Controller>)` and delegate to a controller method; routes carry no `ioc` parameter and no `Depends(get_ioc)`
 - Wrap all mutations using `self.transaction.wrap(self.session, ...)`
+- Collection-level routes (no path parameter) live in `controllers/{domain}/{domain}.py`
+- Single-resource routes (with a path parameter, e.g. `user_id`) live in a subfolder named after the parameter: `controllers/{domain}/{param}/` with a file `{param}.py` inside
+- Each path-parameter subfolder must have an `__init__.py`
+- The collection controller and the single-resource controller each register their own `APIRouter`, and both routers must be included in `main.py`
 
 **Request**
 - All validation here, never in services
@@ -133,10 +137,17 @@ Controller → Request → Service → Storage → Data ↔ Database
 - Functions and methods: `snake_case`
 - Constants: `UPPER_SNAKE_CASE`
 - Type hints are required on all function signatures and class fields
+- Controller (and thin route function) methods must use exactly these CRUD names — nothing else:
+  - `get` — list all (GET collection) or get one by ID (GET /{id})
+  - `create` — create one (POST)
+  - `update` — update one (PATCH /{id})
+  - `delete` — delete one (DELETE /{id})
 
 ### Database
 
-- New tables require `warehouse_full_seed.sql` updates with schema and seed data
+- `warehouse_full_seed.sql` is a backup/reference PostgreSQL script — always update it when adding new tables, with schema and seed data
+- New tables follow the same `tenant_id`-based RLS pattern as all other tables — always enable RLS on new tables
+- Hard delete is the default delete strategy — only use soft delete when the user explicitly requests it
 - Transactions: controller wraps, service never starts, storage operates within
 - Indexes based on documented access patterns only — no speculative optimization
 - Datetime serialization: ISO 8601 UTC — `2026-03-01T14:30:00Z`
@@ -160,6 +171,16 @@ Controller → Request → Service → Storage → Data ↔ Database
 - On the JWT channel, a malformed/expired/absent JWT is treated as anonymous so public routes still work; routes that require auth enforce 401 via `get_current_user`. On the API-key channel, an absent header is anonymous, while a *presented* API key that cannot be resolved returns 401 immediately — presenting a credential that fails never grants anonymous access (the current `ApiKeyStorage` stub instead surfaces 404, "not implemented", until the `api_keys` table exists).
 - Controllers contain no auth/identity-resolution logic. They read identity only through `self.ActiveUserMapper` (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`); `ActiveUserMapper` is the single read surface for request identity.
 - Never trust `tenant_id` or `role` from request body or query params — always read from verified token claims (or the API-key lookup result)
+
+### Users / Identity Entity
+
+- The `User` entity is distinct from the authentication identity (`AuthUser`/`TokenData`) — do not conflate them. `User` is the domain/profile record; `AuthUser`/`TokenData` is the verified per-request identity.
+- User IDs are auto-increment integers (not UUID).
+- Email is a text field, unique **per tenant** (not globally unique).
+- One email may belong to multiple tenants — tenant context always comes from the credential (JWT or API key), never from the email alone.
+- Password is stored as a numeric PIN code, 6–14 digits in length.
+- `UserData` must never expose the password/PIN field in responses (excluded from `to_dict()`).
+- Self-delete guard: a user must not be able to delete their own account.
 
 ### Dependency Injection
 

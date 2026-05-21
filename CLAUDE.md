@@ -41,6 +41,7 @@ Every agent definition in `.claude/agents/` specifies a `Model` field. When spaw
 | docs-writer | haiku |
 | spec-writer | haiku |
 | ui-designer | sonnet |
+| context-builder | haiku |
 | version-control | haiku |
 
 ## Key References
