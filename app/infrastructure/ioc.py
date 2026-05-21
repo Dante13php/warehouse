@@ -199,5 +199,9 @@ async def get_ioc(
     # AuthMiddleware is the single source of identity; get_ioc never decodes a
     # token itself. If the middleware has not run (e.g. a bare test harness),
     # default to anonymous rather than silently re-decoding.
+    #
+    # No SQL session is bound here: this is the dependency for Redis-only / no-DB
+    # routes (e.g. /auth). DB-backed routes use get_ioc_with_session, which opens
+    # a per-request AsyncSession (see app/infrastructure/db_session.py).
     token_data: TokenData | None = getattr(request.state, "token_data", None)
     return Ioc(session=None, token_data=token_data, redis=redis, settings=settings)

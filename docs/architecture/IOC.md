@@ -45,7 +45,7 @@ A resolvable class lives in a module whose file name is the snake_case of the cl
 | Class | Module file | Resolved path |
 |---|---|---|
 | `AuthService` | `auth_service.py` | `app/services/auth/auth_service.py` |
-| `NotImplementedUserLookupService` | `not_implemented_user_lookup_service.py` | `app/services/auth/not_implemented_user_lookup_service.py` |
+| `UserLookupService` | `user_lookup_service.py` | `app/services/auth/user_lookup_service.py` |
 | `RefreshTokenStorage` | `refresh_token_storage.py` | `app/storages/refresh_token_storage.py` |
 | `AbstractMapper` | `abstract_mapper.py` | `app/mappers/abstract_mapper.py` |
 | `ActiveUserMapper` | `active_user_mapper.py` | `app/mappers/active_user_mapper.py` |

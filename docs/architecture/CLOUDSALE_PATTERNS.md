@@ -373,7 +373,7 @@ raises container errors, with no DB access of its own:
 ```python
 class AuthService(AbstractService):
     async def login(self, email: str, password: str) -> dict:
-        user = await self.NotImplementedUserLookupService.get_by_email(email, db_name)
+        user = await self.UserLookupService.get_by_email(email, db_name)
         if user is None:
             verify_password(password, _DUMMY_HASH)  # timing-safe
             raise self.InvalidCredentialsError.get("Invalid credentials")

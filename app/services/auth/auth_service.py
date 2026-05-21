@@ -15,8 +15,12 @@ _DUMMY_HASH = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
 class AuthService(AbstractService):
     async def login(self, email: str, password: str) -> dict:
         settings = self.settings
-        db_name = settings.alembic_shared_db
-        user_lookup = self.NotImplementedUserLookupService
+        # Interim tenant DB (plan Q8): users live in a per-tenant DB; full
+        # email->tenant registry routing is a named follow-up. Until then the
+        # lookup runs against the configured template/tenant DB the request
+        # session is bound to. Passed for signature compatibility.
+        db_name = settings.alembic_template_db
+        user_lookup = self.UserLookupService
         refresh_storage = self.RefreshTokenStorage
 
         user = await user_lookup.get_by_email(email, db_name)

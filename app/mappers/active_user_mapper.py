@@ -55,7 +55,20 @@ class ActiveUserMapper(AbstractMapper):
     async def load(self) -> AuthUser:
         self._require_claims()
         if self._user is None:
-            self._user = await self._ioc.UserStorage.get_by_id(self.user_id)
+            user_data = await self._ioc.UserStorage.get_by_id(int(self.user_id))
+            if user_data is None:
+                raise UnauthenticatedError(
+                    "The authenticated user no longer exists."
+                )
+            # AuthUser is the narrow auth-identity projection (plan Q1: kept
+            # separate from the general UserData management entity).
+            self._user = AuthUser(
+                id=str(user_data.id),
+                tenant_id=str(user_data.tenant_id),
+                email=str(user_data.email),
+                role=str(user_data.role),
+                password_hash=str(user_data.password_hash),
+            )
         return self._user
 
     @property

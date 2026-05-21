@@ -9,11 +9,15 @@ per-user **API key** instead of a JWT.
 > Status: the Redis service that backs refresh tokens is **implemented** (Docker);
 > the auth endpoints and refresh-token flow are **implemented**; the
 > **auth middleware** (JWT + API-key identity initialization) is **implemented**.
-> The `users` and `api_keys` tables are **planned** — until they exist the
-> `UserStorage` and `ApiKeyStorage` lookups are **not-implemented stubs that
-> raise `404 Not Found`**, making the missing feature explicit rather than
-> masquerading as "not found". The API-key branch is fully wired but resolves no
-> users yet.
+> The `users` table is **implemented** (per-tenant `client_template` lineage) and
+> `UserStorage` is a **real storage** backed by it; the auth-side
+> `UserLookupService` (used by `AuthService.login`) is **implemented** against
+> `UserStorage`. The `api_keys` table is still **planned** — until it exists the
+> `ApiKeyStorage` lookup is a **not-implemented stub that raises `404 Not Found`**,
+> making the missing feature explicit. The API-key branch is fully wired but
+> resolves no users yet. Email→tenant routing for login is a **named follow-up**:
+> until it lands, the login lookup runs against the configured per-tenant template
+> DB (`alembic_template_db`).
 
 ## Building blocks
 
@@ -25,7 +29,8 @@ per-user **API key** instead of a JWT.
 | `users` table | Per-tenant database | Tenant-scoped user records, bcrypt password hashes, role. |
 | `api_keys` table | Per-tenant database (planned) | Maps a hashed API key to its owning user. |
 | Auth middleware | Request boundary | `AuthMiddleware` (`app/infrastructure/auth_middleware.py`). Runs before every controller; establishes a trusted identity via a hard channel split by `User-Agent` — browser ⇒ JWT bearer only, non-browser/missing ⇒ API key only (the non-selected credential is never consulted). |
-| `UserStorage` | Storage | Loads the full user record (`AuthUser`) by id for `ActiveUserMapper.load()`. Not-implemented stub (raises 404) until the `users` table exists. |
+| `UserStorage` | Storage | Real storage over the per-tenant `users` table. Loads the user record by id for `ActiveUserMapper.load()` and by email for `UserLookupService` (login). Every authenticated query filters by `tenant_id`. |
+| `UserLookupService` | Service (`app/services/auth/user_lookup_service.py`) | Auth-side email lookup backed by `UserStorage`; returns an `AuthUser` projection (auth identity kept separate from the general `UserData` management entity). Consumed by `AuthService.login`. |
 | `ActiveUserMapper` | Per-request mapper | The single read surface controllers use for identity. Claim-backed identity (`is_initialized()`, `user_id`, `tenant_id`, `role`, `is_admin()`, `is_manager()`) needs no DB; the **full user record** is lazy-loaded and memoized via `await load()` (then `user` / `email`), and `get_api_key()` lazy-loads the user's API key — mirroring CloudSale's `ActiveUserMapper`. |
 
 ## Token claims

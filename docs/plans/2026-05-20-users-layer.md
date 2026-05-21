@@ -2,7 +2,10 @@
 
 ## Status
 
-`draft`
+`superseded` — replaced by `docs/plans/2026-05-20-users-endpoint.md`, which targets the
+current IoC + `BaseController`/`AbstractService`/`AbstractStorage` architecture and was
+implemented on 2026-05-21. This file describes a stale pre-IoC design (router-based wiring,
+constructor-injected storages, plain-`Exception` errors) and is retained for history only.
 
 ## Source task
 

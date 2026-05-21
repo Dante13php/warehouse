@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from typing import Any
+
 from fastapi import HTTPException
 from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -77,6 +79,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
     lookup result — never from the request body, query params, or ``User-Agent``.
     """
 
+    def __init__(self, app: Any) -> None:
+        super().__init__(app)
+        # One pool-backed client shared across all requests. Connections are
+        # borrowed from the pool per command and returned automatically —
+        # no per-request create/aclose needed.
+        self._redis = Redis(connection_pool=get_redis_pool())
+
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
@@ -144,16 +153,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _authenticate_api_key(
         self, api_key: str, settings: Settings
     ) -> TokenData | None:
-        redis = Redis(connection_pool=get_redis_pool())
-        try:
-            ioc = Ioc(session=None, token_data=None, redis=redis, settings=settings)
-            user = await ioc.ApiKeyStorage.get_user_by_api_key(api_key)
-        finally:
-            await redis.aclose()
+        ioc = Ioc(session=None, token_data=None, redis=self._redis, settings=settings)
+        user = await ioc.ApiKeyStorage.get_user_by_api_key(api_key)
         if user is None:
             return None
-        # Identity is sourced from the resolved user record, never from the
-        # request body or query params.
         return TokenData(sub=user.id, tenant_id=user.tenant_id, role=user.role)
 
     @staticmethod
